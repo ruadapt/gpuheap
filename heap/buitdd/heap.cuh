@@ -572,52 +572,14 @@ public:
             int parentIdx = getReversedIdx(getReversedIdx(currentIdx) >> 1);
             int cstatus = INUSE;
             if (threadIdx.x == 0) {
-                *tmpIdx = 0;
-                changeStatus(&status[parentIdx], AVAIL, INUSE);
+                   changeStatus(&status[parentIdx], AVAIL, INUSE);
                 while (cstatus == INUSE) {
                     cstatus = atomicMax(&status[currentIdx], INUSE);
                 }
-                if (cstatus == INSHOLD) {
-                    *tmpIdx = 1;
-                }
-                else if (cstatus == DELMOD) {
-                    *tmpIdx = 2;
-                }
-            }
+               }
             __syncthreads();
-
-            if (*tmpIdx == 0) {
-                __syncthreads();
-                if (threadIdx.x == 0) {
-                    changeStatus(&status[parentIdx], INUSE, AVAIL);
-                    changeStatus(&status[currentIdx], INUSE, cstatus);
-                }
-                __syncthreads();
-                return;
-            }
-            else if (*tmpIdx == 2) {
-                __syncthreads();
-                if (threadIdx.x == 0) {
-                    changeStatus(&status[currentIdx], INUSE, AVAIL);
-                    changeStatus(&status[parentIdx], INUSE, INSHOLD);
-                }
-                __syncthreads();
-                currentIdx = parentIdx;
-                continue;
-            }
-            __syncthreads();
-
-            if (heapItems[currentIdx * batchSize] >= heapItems[parentIdx * batchSize + batchSize - 1]) {
-                __syncthreads();
-
-                if (threadIdx.x == 0) {
-                    changeStatus(&status[currentIdx], INUSE, AVAIL);
-                    changeStatus(&status[parentIdx], INUSE, AVAIL);
-                }
-                __syncthreads();
-                return;
-            }
-            else if (heapItems[parentIdx * batchSize] >= heapItems[currentIdx * batchSize + batchSize - 1]) {
+            
+            if (heapItems[parentIdx * batchSize] >= heapItems[currentIdx * batchSize + batchSize - 1]) {
                 __syncthreads();
                 batchCopy(sMergedItems, 
                           heapItems + parentIdx * batchSize, 

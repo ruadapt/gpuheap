@@ -217,7 +217,11 @@ int main(int argc, char *argv[]) {
 //    h_heap.printHeap();
 #endif
     cout << "delete result\n";
-
+/*
+    for (int i = 0; i < 2 * arrayNum; ++i) {
+        printf("%d %d\n", h_tItems[i], oriItems[i]);
+    }
+*/
 #ifdef THRUST_SORT
     for (int i = 0; i < 2 * arrayNum; ++i) {
         if (h_tItems[i] != oriItems[i]) {
