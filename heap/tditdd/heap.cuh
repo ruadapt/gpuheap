@@ -16,6 +16,11 @@ class Heap {
 #ifdef HEAP_SORT
         int *deleteCount;
 #endif
+#ifdef PBS_MODEL
+        int *globalBenefit;
+        uint32_t *tbstate;
+        uint32_t *terminate;
+#endif
         K *heapItems;
         int *status;
 
@@ -42,6 +47,16 @@ class Heap {
             cudaMalloc((void **)&deleteCount, sizeof(int));
             cudaMemset(deleteCount, 0, sizeof(int));
 #endif
+#ifdef PBS_MODEL
+            cudaMalloc((void **)&globalBenefit, sizeof(int));
+            cudaMemset(globalBenefit, 0, sizeof(int));
+            cudaMalloc((void **)&tbstate, 1024 * sizeof(uint32_t));
+            cudaMemset(tbstate, 0, 1024 * sizeof(uint32_t));
+            uint32_t tmp1 = 1;
+            cudaMemcpy(tbstate, &tmp1, sizeof(uint32_t), cudaMemcpyHostToDevice);
+            cudaMalloc((void **)&terminate, sizeof(uint32_t));
+            cudaMemset(terminate, 0, sizeof(uint32_t));
+#endif
         }
 
         ~Heap() {
@@ -57,8 +72,20 @@ class Heap {
             cudaFree(deleteCount);
             deleteCount = NULL;
 #endif
+#ifdef PBS_MODEL
+            cudaFree(globalBenefit);
+            globalBenefit = NULL;
+            cudaFree(tbstate);
+            tbstate = NULL;
+            cudaFree(terminate);
+            terminate = NULL;
+#endif
             batchNum = 0;
             batchSize = 0;
+        }
+
+        __device__ uint32_t ifTerminate() {
+            return *terminate;
         }
 
         bool checkInsertHeap() {
@@ -155,6 +182,19 @@ class Heap {
             return itemCount;
         }
 
+        int nodeCount() {
+            int bcount;
+            cudaMemcpy(&bcount, batchCount, sizeof(int), cudaMemcpyDeviceToHost);
+            return bcount;
+        }
+
+        int itemCount() {
+            int psize, bcount;
+            cudaMemcpy(&bcount, batchCount, sizeof(int), cudaMemcpyDeviceToHost);
+            cudaMemcpy(&psize, partialBufferSize, sizeof(int), cudaMemcpyDeviceToHost);
+            return psize + bcount * batchSize;
+        }
+
         __host__ bool isEmpty() {
             int psize, bsize;
             cudaMemcpy(&psize, partialBufferSize, sizeof(int), cudaMemcpyDeviceToHost);
@@ -207,6 +247,14 @@ class Heap {
 
             if (*batchCount == 0 && *partialBufferSize == 0) {
                 if (threadIdx.x == 0) {
+#ifdef PBS_MODEL
+                    tbstate[blockIdx.x] = 0;
+                    int i;
+                    for (i = 0; i < gridDim.x; i++) {
+                        if (tbstate[i] == 1) break;
+                    }
+                    if (i == gridDim.x) atomicCAS(terminate, 0, 1);
+#endif
                     changeStatus(&status[0], INUSE, AVAIL);
                 }
                 size = 0;
@@ -221,6 +269,7 @@ class Heap {
                 batchCopy(items + deleteOffset, heapItems, size, true);
 
                 if (threadIdx.x == 0) {
+                    tbstate[blockIdx.x] = 1;
 #ifdef HEAP_SORT
                     *deleteCount += *partialBufferSize;
 #endif
@@ -232,6 +281,7 @@ class Heap {
             }
 
             if (threadIdx.x == 0) {
+                tbstate[blockIdx.x] = 1;
                 changeStatus(&status[1], AVAIL, INUSE);
 #ifdef HEAP_SORT
                 *deleteCount += batchSize;
