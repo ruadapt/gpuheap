@@ -108,6 +108,9 @@ __global__ void oneHeapApplication(Heap<KnapsackItem> *heap, int batchSize,
                             int capacity, int inputSize,
                             int *globalBenefit,
                             int *gc_flag, int gc_threshold,
+#ifdef PERF_DEBUG 
+                            int *explored_nodes,
+#endif
                             bool init_flag = true)
 {
     extern __shared__ int smem[];
@@ -174,6 +177,12 @@ __global__ void oneHeapApplication(Heap<KnapsackItem> *heap, int batchSize,
 #endif
 
         if (*insSize > 0) {
+#ifdef PERF_DEBUG 
+            if (threadIdx.x == 0) {
+                atomicAdd(explored_nodes, *insSize);
+            }
+            __syncthreads();
+#endif
             for (int batchOffset = 0; batchOffset < *insSize; batchOffset += batchSize) {
                 int partialSize = min(batchSize, *insSize - batchOffset);
                 heap->insertion(insItem + batchOffset, partialSize, smemOffset);
@@ -219,6 +228,10 @@ void oneheap(int *weight, int *benefit, float *benefitPerWeight,
 	struct timeval startTime, endTime;
 	setTime(&startTime);
 #ifdef PERF_DEBUG
+    int *explored_nodes;
+    cudaMalloc((void **)&explored_nodes, sizeof(int));
+    cudaMemset(explored_nodes, 0, sizeof(int));
+
     struct timeval appStartTime, appEndTime;
     double appTime = 0;
     struct timeval gcStartTime, gcEndTime;
@@ -234,6 +247,9 @@ void oneheap(int *weight, int *benefit, float *benefitPerWeight,
                                                          capacity, inputSize,
                                                          heap.globalBenefit,
                                                          gc_flag, gc_threshold,
+#ifdef PERF_DEBUG
+                                                         explored_nodes,
+#endif
                                                          init_flag);
         cudaDeviceSynchronize();
 #ifdef PERF_DEBUG
@@ -244,7 +260,9 @@ void oneheap(int *weight, int *benefit, float *benefitPerWeight,
         cudaMemcpy(&batchCount, heap.batchCount, sizeof(int), cudaMemcpyDeviceToHost);
         int cur_benefit = 0;
         cudaMemcpy(&cur_benefit, heap.globalBenefit, sizeof(int), cudaMemcpyDeviceToHost);
-        cout << appTime << " " << batchCount << " " << cur_benefit << " "; 
+        int h_explored_nodes = 0;
+        cudaMemcpy(&h_explored_nodes, explored_nodes, sizeof(int), cudaMemcpyDeviceToHost);
+        cout << appTime << " " << batchCount << " " << cur_benefit << " " << h_explored_nodes << " "; 
 #endif
         int app_terminate = 0;
         cudaMemcpy(&app_terminate, heap.terminate, sizeof(int), cudaMemcpyDeviceToHost);
