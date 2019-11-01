@@ -14,11 +14,5 @@ knapsack: main.cu models.cuh gc.cuh
 knapsack_debug: main.cu models.cuh gc.cuh
 	${NVCC} ${NVCCFLAG} -I${TD_HEAP_DIR} ${KNAPSACK_FLAG} ${DEBUG_FLAG} $< -o $@
 
-bufferTest: bufferTest.cu buffer.cuh
-	${NVCC} ${NVCCFLAG} $< -o $@
-
-bufferTest_debug: bufferTest.cu buffer.cuh
-	${NVCC} ${NVCCFLAG} -DPRINT_DEBUG $< -o $@
-
 clean:
-	rm -rf knapsack knapsack_debug bufferTest bufferTest_debug
+	rm -rf knapsack knapsack_debug
