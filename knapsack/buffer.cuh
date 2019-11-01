@@ -1,6 +1,6 @@
 #ifndef BUFFER_CUH
 #define BUFFER_CUH
-
+// TODO we may need to reuse the space and let it be a buffer
 using namespace std;
 
 template <typename K=int>
@@ -50,6 +50,15 @@ beginPos------------readPos------writePos------------endPos
         bufferLock = NULL;
     }
 
+    void printBufferPtr() {
+        int h_read, h_write, h_begin, h_end;
+        cudaMemcpy(&h_read, readPos, sizeof(int), cudaMemcpyDeviceToHost);
+        cudaMemcpy(&h_write, writePos, sizeof(int), cudaMemcpyDeviceToHost);
+        cudaMemcpy(&h_begin, begPos, sizeof(int), cudaMemcpyDeviceToHost);
+        cudaMemcpy(&h_end, endPos, sizeof(int), cudaMemcpyDeviceToHost);
+
+        cout << h_begin << " " << h_read << " " << h_write << " " << h_end << endl;
+    }
     void printBuffer() {
         K *h_items = new K[capacity];
         cudaMemcpy(h_items, bufferItems, capacity * sizeof(K), cudaMemcpyDeviceToHost);
@@ -117,35 +126,39 @@ beginPos------------readPos------writePos------------endPos
     }
 
     __device__ bool deleteFromBuffer(K *items,
-                                     int size,
+                                     int &size,
                                      int smemOffset) {
         extern __shared__ int s[];
         int *deleteStartPos = (int *)&s[smemOffset];
         int *deleteSize = (int *)&deleteStartPos[1];
 
         if (!threadIdx.x) {
-            *deleteSize = (size == 0) ? blockDim.x : size;
-            while (atomicCAS(bufferLock, 0, 1) != 0) {}
-            if (*writePos - *readPos >= *deleteSize)  {
-                *deleteStartPos = atomicAdd(readPos, *deleteSize);
+            *deleteSize = 0;
+            while (1) {
+                int tmpSize = *writePos - *readPos;
+                *deleteSize = tmpSize < blockDim.x ? tmpSize : blockDim.x;
+                if (*deleteSize == 0) break;
+                int tmpReadPos = *readPos;
+                if (tmpReadPos == atomicCAS(readPos, tmpReadPos, tmpReadPos + *deleteSize)) {
+                    *deleteStartPos = tmpReadPos;
+                    break;
+                }
             }
-            else {
-                *deleteSize = 0;
-            }
-            atomicExch(bufferLock, 0);
         }
         __syncthreads();
 
-        if (!*deleteSize) return false;
+        size = *deleteSize;
         __syncthreads();
 
-        for (int i = threadIdx.x; i < *deleteSize; i += blockDim.x) {
+        if (size == 0) return false;
+
+        for (int i = threadIdx.x; i < size; i += blockDim.x) {
             items[i] = bufferItems[*deleteStartPos + i];
         }
         __syncthreads();
 
         if (!threadIdx.x) {
-            while (atomicCAS(begPos, *deleteStartPos, *deleteStartPos + *deleteSize) != *deleteStartPos) {}
+            while (atomicCAS(begPos, *deleteStartPos, *deleteStartPos + size) != *deleteStartPos) {}
         }
         __syncthreads();
 

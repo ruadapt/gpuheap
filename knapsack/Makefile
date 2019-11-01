@@ -17,5 +17,8 @@ knapsack_debug: main.cu models.cuh gc.cuh
 bufferTest: bufferTest.cu buffer.cuh
 	${NVCC} ${NVCCFLAG} $< -o $@
 
+bufferTest_debug: bufferTest.cu buffer.cuh
+	${NVCC} ${NVCCFLAG} -DPRINT_DEBUG $< -o $@
+
 clean:
-	rm -rf knapsack knapsack_debug bufferTest
+	rm -rf knapsack knapsack_debug bufferTest bufferTest_debug
