@@ -13,11 +13,14 @@ using namespace std;
 __global__ void concurrentKernel(Buffer<int> *buffer, int *items, int arraySize, int blockNum, int blockSize) {
 
     if (blockIdx.x < blockNum / 2) {
-        blockSize = blockSize / 3;
         int batchNeed = (arraySize + blockSize - 1) / blockSize;
         for (int i = blockIdx.x; i < batchNeed; i += gridDim.x / 2) {
             int size = blockSize < (arraySize - blockSize * i) ? blockSize : (arraySize - blockSize * i);
-            buffer->insertToBuffer(items + arraySize + i * blockSize, size, 0);
+//            buffer->insertToBuffer(items + arraySize + i * blockSize, size, 0);
+            int tmp_size = size / 3;
+            buffer->insertToBuffer(items + arraySize + i * blockSize, tmp_size, 0);
+            __syncthreads();
+            buffer->insertToBuffer(items + arraySize + i * blockSize + tmp_size, (size - tmp_size), 0);
             __syncthreads();
         }
     }
@@ -25,8 +28,10 @@ __global__ void concurrentKernel(Buffer<int> *buffer, int *items, int arraySize,
         int batchNeed = (arraySize + blockSize - 1) / blockSize;
         for (int i = blockIdx.x - gridDim.x / 2; i < batchNeed; i += gridDim.x / 2) {
             int size = 0;
-            buffer->deleteFromBuffer(items + i * blockSize, size, 0);
-            __syncthreads();
+            while (size == 0) {
+                buffer->deleteFromBuffer(items + i * blockSize, size, 0);
+                __syncthreads();
+            }
         }
     }
 }
@@ -122,6 +127,16 @@ int main(int argc, char *argv[]) {
     h_buffer.printBufferPtr();
 //    h_buffer.printBuffer();
     printf("-----------\n");
+#endif
+    cudaMemcpy(resItems, bufferItems, sizeof(int) * arrayNum, cudaMemcpyDeviceToHost);
+    sort(resItems, resItems + arrayNum);
+    for (int i = 0; i < arrayNum; ++i) {
+        if (resItems[i] != oriItems[i]) {
+            printf("Wrong Answer! %d buffer: %d ori: %d\n", i, resItems[i], oriItems[i]);
+            return -1;
+        }
+    }
+#ifdef PRINT_DEBUG
     setTime(&startTime);
 #endif
     deleteKernel<<<blockNum, blockSize, smemSize>>>(d_buffer, bufferItems, arrayNum, blockSize);
@@ -148,7 +163,7 @@ int main(int argc, char *argv[]) {
 
     for (int i = 0; i < 2 * arrayNum; ++i) {
         if (resItems[i] != oriItems[i]) {
-            printf("Wrong Answer! buffer: %d ori: %d\n", resItems[i], oriItems[i]);
+            printf("Wrong Answer! %d buffer: %d ori: %d\n", i, resItems[i], oriItems[i]);
             return -1;
         }
     }
