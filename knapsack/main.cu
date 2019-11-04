@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "models.cuh"
+#include "models_fifo.cuh"
 #include "util.cuh"
 #include "datastructure.hpp"
 
@@ -20,7 +21,7 @@ int main(int argc, char *argv[])
 {
     if (argc != 11) {
         cout << "./knapsack [dataset] [batchnum] [batchsize] [blocknum] [blocksize] \
-            [model] [delAllowed] [gcThreshold] [expandThreshold] [endingBlockNum]\n";
+            [gcThreshold] [model] [delAllowed] [gcThreshold] [expandThreshold] [endingBlockNum]\n";
         return 1;
     }
     ifstream inputFile;
@@ -30,7 +31,7 @@ int main(int argc, char *argv[])
     int blockNum = atoi(argv[4]);
     int blockSize = atoi(argv[5]);
     int gc_threshold = atoi(argv[6]);
-    /*int model = atoi(argv[6]);*/
+    int model = atoi(argv[7]);
     /*int delAllowed = atoi(argv[7]);*/
     /*int gcThreshold = atoi(argv[8]);*/
     /*int expandThreshold = atoi(argv[9]);*/
@@ -80,11 +81,17 @@ int main(int argc, char *argv[])
     cudaMalloc((void **)&d_max_benefit, sizeof(int));
     cudaMemcpy(d_max_benefit, &max_benefit, sizeof(int), cudaMemcpyHostToDevice);
 
-    oneheap(d_weight, d_benefit, d_benefitPerWeight,
-            d_max_benefit, capacity, inputSize,
-            batchNum, batchSize, blockNum, blockSize,
-            gc_threshold);
-
+    if (model == 0) /* heap */ {
+        oneheap(d_weight, d_benefit, d_benefitPerWeight,
+                d_max_benefit, capacity, inputSize,
+                batchNum, batchSize, blockNum, blockSize,
+                gc_threshold);
+    } else if (model == 1) /* fifo queue */ {
+        onebuffer(d_weight, d_benefit, d_benefitPerWeight,
+                d_max_benefit, capacity, inputSize,
+                batchNum, batchSize, blockNum, blockSize,
+                gc_threshold);
+    }
     cudaMemcpy(&max_benefit, d_max_benefit, sizeof(int), cudaMemcpyDeviceToHost);
 
     cout << max_benefit << endl;
