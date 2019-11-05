@@ -243,7 +243,7 @@ void oneheapearlystop(int *weight, int *benefit, float *benefitPerWeight,
         heapDataToArray<KnapsackItem>(heap, buffer.bufferItems, remain_item_number);
         cudaMemcpy(buffer.writePos, &remain_item_number, sizeof(unsigned long long int), cudaMemcpyHostToDevice);
         cudaMemcpy(buffer.endPos, &remain_item_number, sizeof(unsigned long long int), cudaMemcpyHostToDevice);
-        cudaMemcpy(buffer.globalBenefit, heap.globalBenefit, sizeof(int), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(buffer.globalBenefit, &tmpBenefit, sizeof(int), cudaMemcpyHostToDevice);
 
         cudaMemcpy(activeCount, &remain_item_number, sizeof(int), cudaMemcpyHostToDevice);
         oneBufferApplication<<<blockNum, blockSize, smemOffset>>>(d_buffer, batchSize, 
