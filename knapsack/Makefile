@@ -1,5 +1,5 @@
 NVCC=nvcc
-NVCCFLAG= -g -G -arch=sm_61 -O3 -std=c++11
+NVCCFLAG= -g -G -arch=sm_61 -O0 -std=c++11
 KNAPSACK_FLAG=-DPBS_MODEL
 DEBUG_FLAG=-DPERF_DEBUG #-DPRINT_DEBUG
 

@@ -87,4 +87,44 @@ __device__ void appKernel(int *weight, int *benefit, float *benefitPerWeight,
     }
 }
 
+// addKernel wrapper which allows items being expanded more than once in smem
+__device__ void appKernelWrapper(int *weight, int *benefit, float *benefitPerWeight,
+                              int *max_benefit, int inputSize, int capacity,
+                              KnapsackItem *delItems, int *delSize,
+                              KnapsackItem *insItems, int *insSize)
+{
+    // store original *delSize for termination check
+    int tmpDelSize = 0;
+    if (threadIdx.x == 0) {
+        tmpDelSize = *delSize;
+    }
+    __syncthreads();
+    while (1) {
+        appKernel(weight, benefit, benefitPerWeight,
+                  max_benefit, inputSize, capacity,
+                  delItems, delSize,
+                  insItems, insSize);
+        __syncthreads();
+        if (*insSize >= blockDim.x || *insSize == 0) {
+            if (threadIdx.x == 0) {
+                *delSize = tmpDelSize;
+            }
+            __syncthreads();
+            break;
+        }
+        __syncthreads();
+        // copy items in insItems to delItems
+        for (int i = threadIdx.x; i < *insSize; i += blockDim.x) {
+            delItems[i] = insItems[i];
+        }
+        __syncthreads();
+        if (threadIdx.x == 0) {
+            *delSize = *insSize;
+            *insSize = 0;
+        }
+        __syncthreads();
+    }
+
+}
+
 #endif

@@ -67,7 +67,7 @@ __global__ void oneBufferApplication(Buffer<KnapsackItem> *buffer, int batchSize
         __syncthreads();
 
         if (*delSize > 0) {
-            appKernel(weight, benefit, benefitPerWeight,
+            appKernelWrapper(weight, benefit, benefitPerWeight,
                       globalBenefit, inputSize, capacity,
                       delItem, delSize,
                       insItem, insSize);
