@@ -3,7 +3,7 @@
 #include <vector>
 #include <algorithm>
 
-#include "models.cuh"
+#include "models_pq.cuh"
 #include "models_fifo.cuh"
 #include "util.cuh"
 #include "datastructure.hpp"
