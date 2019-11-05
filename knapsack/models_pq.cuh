@@ -1,5 +1,5 @@
-#ifndef MODELS_CUH
-#define MODELS_CUH
+#ifndef MODELS_PQ_CUH
+#define MODELS_PQ_CUH
 
 #include <functional>
 #include <iostream>
@@ -180,9 +180,9 @@ void oneheap(int *weight, int *benefit, float *benefitPerWeight,
         cudaMemcpy(&h_explored_nodes, explored_nodes, sizeof(int), cudaMemcpyDeviceToHost);
         cout << appTime << " " << batchCount << " " << cur_benefit << " " << h_explored_nodes << " "; 
 #endif
-        int app_terminate = 0;
-        cudaMemcpy(&app_terminate, heap.terminate, sizeof(int), cudaMemcpyDeviceToHost);
-        if (app_terminate) break;
+        /*int app_terminate = 0;*/
+        /*cudaMemcpy(&app_terminate, heap.terminate, sizeof(int), cudaMemcpyDeviceToHost);*/
+        /*if (app_terminate) break;*/
 #ifdef PERF_DEBUG
         setTime(&gcStartTime);
 #endif
@@ -200,6 +200,7 @@ void oneheap(int *weight, int *benefit, float *benefitPerWeight,
         // reset gc flag
         cudaMemset(gc_flag, 0, sizeof(int));
         int tmpItemCount = heap.itemCount();
+        if (tmpItemCount == 0) break;
         cudaMemcpy(activeCount, &tmpItemCount, sizeof(int), cudaMemcpyHostToDevice);
         init_flag = false;
     }

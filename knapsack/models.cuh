@@ -5,109 +5,20 @@
 #include <iostream>
 #include "util.cuh"
 #include "heap.cuh"
+#include "buffer.cuh"
 #include "gc.cuh"
 #include "datastructure.hpp"
 #include "knapsackKernel.cuh"
+#include "models_fifo.cuh"
+#include "knapsack_util.cuh"
 
 using namespace std;
 
-/*__global__ void init(Heap<KnapsackItem> *heap) {*/
-    /*KnapsackItem a(0, 0, -1, 0);*/
-    /*heap->insertion(&a, 1, 0);*/
-/*}*/
-
-/*__device__ int ComputeBound(int newBenefit, int newWeight, int index, int inputSize, int capacity, int *weight, int *benefit)*/
-/*{	*/
-    /*// if weight overcomes the knapsack capacity, return*/
-    /*// 0 as expected bound*/
-    /*if (newWeight >= capacity)*/
-        /*return 0;*/
-
-    /*// initialize bound on profit by current profit*/
-    /*int profit_bound = 0;*/
-
-    /*// start including items from index 1 more to current*/
-    /*// item index*/
-    /*int j = index + 1;*/
-    /*double totweight = newWeight;*/
-    
-    /*// checking index condition and knapsack capacity*/
-    /*// condition*/
-    /*while ((j < inputSize) && (totweight + ((double) weight[j]) <= capacity))*/
-    /*{*/
-        /*totweight    += (double) weight[j];*/
-        /*profit_bound += benefit[j];*/
-        /*j++;*/
-    /*}*/
-
-    /*// If k is not n, include last item partially for*/
-    /*// upper bound on profit*/
-    /*if (j < inputSize)*/
-        /*profit_bound += (capacity - totweight) * benefit[j] / ((double)weight[j]);*/
-
-    /*return profit_bound;*/
-/*}*/
-
-/*__device__ void appKernel(int *weight, int *benefit, float *benefitPerWeight,*/
-                          /*int *globalBenefit, int inputSize, int capacity,*/
-                          /*KnapsackItem *delItem, int *delSize,*/
-                          /*KnapsackItem *insItem, int *insSize) */
-/*{*/
-    /*for(int i = threadIdx.x; i < *delSize; i += blockDim.x){*/
-        /*KnapsackItem item = delItem[i];*/
-        /*int oldBenefit = -item.first;*/
-        /*int oldWeight = item.second;*/
-        /*short oldIndex = item.third;*/
-/*//        short oldSeq = item.fourth;*/
-
-        /*int _bound = ComputeBound(oldBenefit, oldWeight, oldIndex, inputSize, capacity, weight, benefit);*/
-        /*if (oldBenefit + _bound < *globalBenefit) continue;*/
-
-        /*short index = oldIndex + 1;*/
-
-        /*if (index == inputSize) continue;*/
-
-        /*// check for 1: accept item at current level*/
-        /*int newBenefit = oldBenefit + benefit[index];*/
-        /*int newWeight = oldWeight + weight[index];*/
-        /*int newBound = ComputeBound(newBenefit, newWeight, index, inputSize, capacity, weight, benefit);*/
-        /*// int newBound = bound[index + 1];*/
-
-        /*if(newWeight <= capacity){*/
-            /*int oldMax = atomicMax(globalBenefit, newBenefit);*/
-        /*}*/
-        
-        /*// printf("bid: %d, processing: %d %u %d, %llu\n", blockIdx.x, -oldBenefit, oldWeight, index, oldSeq);*/
-        /*if(newWeight <= capacity && newBenefit + newBound > *globalBenefit){*/
-            /*int insIndex = atomicAdd(insSize, 1);*/
-            /*// printf("choose 1: %d %u %llu\n", -oldBenefit, oldWeight, oldSeq, -newBenefit, newWeight, ((oldSeq << 1) + 1));*/
-            /*insItem[insIndex].first = -newBenefit;*/
-            /*insItem[insIndex].second = newWeight;*/
-            /*insItem[insIndex].third = index;*/
-/*//            insItem[insIndex].fourth = ((oldSeq << 1) + 1);*/
-        /*}*/
-        /*int newBound1 = ComputeBound(oldBenefit, oldWeight, index, inputSize, capacity, weight, benefit);*/
-        /*// newBound = bound[index + 1];*/
-/*//        printf("%d-%d i: %d 0: %d %d 1: %d %d\n", blockIdx.x, threadIdx.x, index,*/
-/*//				oldWeight <= capacity, oldBenefit + newBound1 > *globalBenefit, */
-/*//				newWeight <= capacity, newBenefit + newBound > *globalBenefit);*/
-        /*// check for 0: reject current item*/
-        /*if(oldWeight <= capacity && oldBenefit + newBound1 > *globalBenefit){*/
-            /*int insIndex = atomicAdd(insSize, 1);*/
-            /*// printf("old: %d %u %llu, choose 0: %d %u %llu\n", -oldBenefit, oldWeight, oldSeq, -oldBenefit, oldWeight, oldSeq << 1);*/
-            /*insItem[insIndex].first = -oldBenefit;*/
-            /*insItem[insIndex].second = oldWeight;*/
-            /*insItem[insIndex].third = index;*/
-/*//            insItem[insIndex].fourth = oldSeq << 1;*/
-        /*}*/
-    /*}*/
-/*}*/
-
-__global__ void oneHeapApplication(Heap<KnapsackItem> *heap, int batchSize, 
+__global__ void oneHeapApplicationEarlyStop(Heap<KnapsackItem> *heap, int batchSize, 
                             int *weight, int *benefit, float *benefitPerWeight,
                             int capacity, int inputSize,
-                            int *globalBenefit,
-                            int *gc_flag, int gc_threshold,
+                            int *globalBenefit, int *activeCount,
+                            int *gc_flag, int gc_threshold, int max_benefit,
 #ifdef PERF_DEBUG 
                             int *explored_nodes,
 #endif
@@ -125,6 +36,7 @@ __global__ void oneHeapApplication(Heap<KnapsackItem> *heap, int batchSize,
     bool init = init_flag;
     if (threadIdx.x == 0) {
         heap->tbstate[blockIdx.x] = 1;
+        *delSize = 0;
     }
     __syncthreads();
 
@@ -191,21 +103,25 @@ __global__ void oneHeapApplication(Heap<KnapsackItem> *heap, int batchSize,
         }
         __syncthreads();
         if (threadIdx.x == 0) {
-            *delSize = heap->ifTerminate();
+            atomicAdd(activeCount, (*insSize - *delSize));
+            if (atomicAdd(activeCount, 0) == 0 || 
+                    *globalBenefit == max_benefit) {
+                *delSize = -1; // TODO: use one global flag for termination
+            }
+            /**delSize = heap->ifTerminate();*/
             if (*heap->batchCount > gc_threshold) {
                 *gc_flag  = 1;
             }
         }
         __syncthreads();
-        if (*delSize == 1 || *gc_flag == 1) break;
-
+        if (*delSize == -1 || *gc_flag == 1) break;
     }
 }
 
-void oneheap(int *weight, int *benefit, float *benefitPerWeight,
+void oneheapearlystop(int *weight, int *benefit, float *benefitPerWeight,
              int *max_benefit, int capacity, int inputSize,
              int batchNum, int batchSize, int blockNum, int blockSize,
-             int gc_threshold)
+             int gc_threshold, int global_max_benefit)
 {
 
     /* prepare heap data */
@@ -224,8 +140,13 @@ void oneheap(int *weight, int *benefit, float *benefitPerWeight,
     int *gc_flag;
     cudaMalloc((void **)&gc_flag, sizeof(int));
     cudaMemset(gc_flag, 0, sizeof(int));
+    int *activeCount;
+    cudaMalloc((void **)&activeCount, sizeof(int));
+    int initActiveCount = 1;
+    cudaMemcpy(activeCount, &initActiveCount, sizeof(int), cudaMemcpyHostToDevice);
 
 	struct timeval startTime, endTime;
+    double heapTime = 0, fifoTime = 0;
 	setTime(&startTime);
 #ifdef PERF_DEBUG
     int *explored_nodes;
@@ -236,22 +157,27 @@ void oneheap(int *weight, int *benefit, float *benefitPerWeight,
     double appTime = 0;
     struct timeval gcStartTime, gcEndTime;
     double gcTime = 0;
+    cout << global_max_benefit << endl;
 #endif
+
+    // TODO: change the name
+    int tmpItemCount = 0, tmpBenefit = 0;
 
     while (1) {
 #ifdef PERF_DEBUG
         setTime(&appStartTime);
 #endif
-        oneHeapApplication<<<blockNum, blockSize, smemOffset>>>(d_heap, batchSize, 
+        oneHeapApplicationEarlyStop<<<blockNum, blockSize, smemOffset>>>(d_heap, batchSize, 
                                                          weight, benefit, benefitPerWeight,
                                                          capacity, inputSize,
-                                                         heap.globalBenefit,
-                                                         gc_flag, gc_threshold,
+                                                         heap.globalBenefit, activeCount,
+                                                         gc_flag, gc_threshold, global_max_benefit,
 #ifdef PERF_DEBUG
                                                          explored_nodes,
 #endif
                                                          init_flag);
         cudaDeviceSynchronize();
+        init_flag = false;
 #ifdef PERF_DEBUG
         setTime(&appEndTime);
         appTime += getTime(&appStartTime, &appEndTime);
@@ -264,9 +190,9 @@ void oneheap(int *weight, int *benefit, float *benefitPerWeight,
         cudaMemcpy(&h_explored_nodes, explored_nodes, sizeof(int), cudaMemcpyDeviceToHost);
         cout << appTime << " " << batchCount << " " << cur_benefit << " " << h_explored_nodes << " "; 
 #endif
-        int app_terminate = 0;
-        cudaMemcpy(&app_terminate, heap.terminate, sizeof(int), cudaMemcpyDeviceToHost);
-        if (app_terminate) break;
+        /*int app_terminate = 0;*/
+        /*cudaMemcpy(&app_terminate, heap.terminate, sizeof(int), cudaMemcpyDeviceToHost);*/
+        /*if (app_terminate) break;*/
 #ifdef PERF_DEBUG
         setTime(&gcStartTime);
 #endif
@@ -283,18 +209,69 @@ void oneheap(int *weight, int *benefit, float *benefitPerWeight,
 #endif
         // reset gc flag
         cudaMemset(gc_flag, 0, sizeof(int));
-        init_flag = false;
+
+        // if no items rest break
+        tmpItemCount = heap.itemCount();
+        if (tmpItemCount == 0) break;
+
+        // if benefit == global_max_benefit break
+        cudaMemcpy(&tmpBenefit, heap.globalBenefit, sizeof(int), cudaMemcpyDeviceToHost);
+        if (tmpBenefit == global_max_benefit) break;
+        cudaMemcpy(activeCount, &tmpItemCount, sizeof(int), cudaMemcpyHostToDevice);
     }
 
 #ifdef PERF_DEBUG
     cout << endl;
 #endif
+    setTime(&endTime);
+    heapTime = getTime(&startTime, &endTime);
+    cout << "heap time: " << heapTime << endl;
 
-	setTime(&endTime);
-	cout << getTime(&startTime, &endTime) << endl;
-    cudaMemcpy((int *)max_benefit, heap.globalBenefit, sizeof(int), cudaMemcpyDeviceToDevice);
+    if (tmpItemCount != 0) {
+        // we switch to the fifo queue mode
+
+        setTime(&startTime);
+        // prepare fifo queue (buffer)
+        Buffer<KnapsackItem> buffer(batchSize * batchNum);
+        Buffer<KnapsackItem> *d_buffer;
+        cudaMalloc((void **)&d_buffer, sizeof(Buffer<KnapsackItem>));
+        cudaMemcpy(d_buffer, &buffer, sizeof(Buffer<KnapsackItem>), cudaMemcpyHostToDevice);
+
+        // copy data items in heap to fifo queue
+        // TODO this is not a good implementation that manually change the fifo queue ptr
+        unsigned long long int remain_item_number;
+        heapDataToArray<KnapsackItem>(heap, buffer.bufferItems, remain_item_number);
+        cudaMemcpy(buffer.writePos, &remain_item_number, sizeof(unsigned long long int), cudaMemcpyHostToDevice);
+        cudaMemcpy(buffer.endPos, &remain_item_number, sizeof(unsigned long long int), cudaMemcpyHostToDevice);
+        cudaMemcpy(buffer.globalBenefit, heap.globalBenefit, sizeof(int), cudaMemcpyDeviceToDevice);
+
+        cudaMemcpy(activeCount, &remain_item_number, sizeof(int), cudaMemcpyHostToDevice);
+        oneBufferApplication<<<blockNum, blockSize, smemOffset>>>(d_buffer, batchSize, 
+                                                         weight, benefit, benefitPerWeight,
+                                                         capacity, inputSize,
+                                                         buffer.globalBenefit, activeCount,
+                                                         gc_flag, gc_threshold,
+#ifdef PERF_DEBUG
+                                                         explored_nodes,
+#endif
+                                                         init_flag);
+        cudaDeviceSynchronize();
+
+        setTime(&endTime);
+        fifoTime = getTime(&startTime, &endTime);
+        cout << "gc time: " << fifoTime << endl;
+        cudaMemcpy((int *)max_benefit, buffer.globalBenefit, sizeof(int), cudaMemcpyDeviceToDevice);
+        cudaFree(d_buffer); d_buffer = NULL;
+    }
+
+
+    int h_explored_nodes;
+    cudaMemcpy(&h_explored_nodes, explored_nodes, sizeof(int), cudaMemcpyDeviceToHost);
+    cout << "total time: " << heapTime + fifoTime << " explored nodes: " << h_explored_nodes << endl;
+
     cudaFree(d_heap); d_heap = NULL;
     cudaFree(gc_flag); gc_flag = NULL;
+    cudaFree(activeCount); activeCount = NULL;
 }
 
 #endif

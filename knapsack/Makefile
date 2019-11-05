@@ -9,10 +9,10 @@ BUFFER_DIR=../buffer/
 
 all: knapsack
 
-knapsack: main.cu models_fifo.cuh models_pq.cuh gc.cuh
+knapsack: main.cu models.cuh models_fifo.cuh models_pq.cuh gc.cuh
 	${NVCC} ${NVCCFLAG} -I${TD_HEAP_DIR} -I${BUFFER_DIR} ${KNAPSACK_FLAG} $< -o $@
 
-knapsack_debug: main.cu models_fifo.cuh models_pq.cuh gc.cuh
+knapsack_debug: main.cu models.cuh models_fifo.cuh models_pq.cuh gc.cuh
 	${NVCC} ${NVCCFLAG} -I${TD_HEAP_DIR} -I${BUFFER_DIR} ${KNAPSACK_FLAG} ${DEBUG_FLAG} $< -o $@
 
 #knapsack_fifo: main.cu models_fifo.cuh

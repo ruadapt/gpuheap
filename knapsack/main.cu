@@ -3,6 +3,7 @@
 #include <vector>
 #include <algorithm>
 
+#include "models.cuh"
 #include "models_pq.cuh"
 #include "models_fifo.cuh"
 #include "util.cuh"
@@ -91,6 +92,18 @@ int main(int argc, char *argv[])
                 d_max_benefit, capacity, inputSize,
                 batchNum, batchSize, blockNum, blockSize,
                 gc_threshold);
+    } else if (model == 2) /* heap + fifo queue */ {
+        oneheap(d_weight, d_benefit, d_benefitPerWeight,
+                d_max_benefit, capacity, inputSize,
+                batchNum, batchSize, blockNum, blockSize,
+                gc_threshold);
+        cudaMemcpy(&max_benefit, d_max_benefit, sizeof(int), cudaMemcpyDeviceToHost);
+        cudaMemset(d_max_benefit, 0, sizeof(int));
+
+        oneheapearlystop(d_weight, d_benefit, d_benefitPerWeight,
+                d_max_benefit, capacity, inputSize,
+                batchNum, batchSize, blockNum, blockSize,
+                gc_threshold, max_benefit);
     }
     cudaMemcpy(&max_benefit, d_max_benefit, sizeof(int), cudaMemcpyDeviceToHost);
 

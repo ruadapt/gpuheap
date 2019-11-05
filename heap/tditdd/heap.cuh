@@ -83,10 +83,11 @@ class Heap {
             batchNum = 0;
             batchSize = 0;
         }
-
+#ifdef PBS_MODEL
         __device__ uint32_t ifTerminate() {
             return *terminate;
         }
+#endif
 
         bool checkInsertHeap() {
             int h_batchCount;
@@ -269,7 +270,9 @@ class Heap {
                 batchCopy(items + deleteOffset, heapItems, size, true);
 
                 if (threadIdx.x == 0) {
+#ifdef PBS_MODEL
                     tbstate[blockIdx.x] = 1;
+#endif
 #ifdef HEAP_SORT
                     *deleteCount += *partialBufferSize;
 #endif
@@ -281,7 +284,9 @@ class Heap {
             }
 
             if (threadIdx.x == 0) {
+#ifdef PBS_MODEL
                 tbstate[blockIdx.x] = 1;
+#endif
                 changeStatus(&status[1], AVAIL, INUSE);
 #ifdef HEAP_SORT
                 *deleteCount += batchSize;
