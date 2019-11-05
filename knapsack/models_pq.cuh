@@ -11,102 +11,10 @@
 
 using namespace std;
 
-/*__global__ void init(Heap<KnapsackItem> *heap) {*/
-    /*KnapsackItem a(0, 0, -1, 0);*/
-    /*heap->insertion(&a, 1, 0);*/
-/*}*/
-
-/*__device__ int ComputeBound(int newBenefit, int newWeight, int index, int inputSize, int capacity, int *weight, int *benefit)*/
-/*{	*/
-    /*// if weight overcomes the knapsack capacity, return*/
-    /*// 0 as expected bound*/
-    /*if (newWeight >= capacity)*/
-        /*return 0;*/
-
-    /*// initialize bound on profit by current profit*/
-    /*int profit_bound = 0;*/
-
-    /*// start including items from index 1 more to current*/
-    /*// item index*/
-    /*int j = index + 1;*/
-    /*double totweight = newWeight;*/
-    
-    /*// checking index condition and knapsack capacity*/
-    /*// condition*/
-    /*while ((j < inputSize) && (totweight + ((double) weight[j]) <= capacity))*/
-    /*{*/
-        /*totweight    += (double) weight[j];*/
-        /*profit_bound += benefit[j];*/
-        /*j++;*/
-    /*}*/
-
-    /*// If k is not n, include last item partially for*/
-    /*// upper bound on profit*/
-    /*if (j < inputSize)*/
-        /*profit_bound += (capacity - totweight) * benefit[j] / ((double)weight[j]);*/
-
-    /*return profit_bound;*/
-/*}*/
-
-/*__device__ void appKernel(int *weight, int *benefit, float *benefitPerWeight,*/
-                          /*int *globalBenefit, int inputSize, int capacity,*/
-                          /*KnapsackItem *delItem, int *delSize,*/
-                          /*KnapsackItem *insItem, int *insSize) */
-/*{*/
-    /*for(int i = threadIdx.x; i < *delSize; i += blockDim.x){*/
-        /*KnapsackItem item = delItem[i];*/
-        /*int oldBenefit = -item.first;*/
-        /*int oldWeight = item.second;*/
-        /*short oldIndex = item.third;*/
-/*//        short oldSeq = item.fourth;*/
-
-        /*int _bound = ComputeBound(oldBenefit, oldWeight, oldIndex, inputSize, capacity, weight, benefit);*/
-        /*if (oldBenefit + _bound < *globalBenefit) continue;*/
-
-        /*short index = oldIndex + 1;*/
-
-        /*if (index == inputSize) continue;*/
-
-        /*// check for 1: accept item at current level*/
-        /*int newBenefit = oldBenefit + benefit[index];*/
-        /*int newWeight = oldWeight + weight[index];*/
-        /*int newBound = ComputeBound(newBenefit, newWeight, index, inputSize, capacity, weight, benefit);*/
-        /*// int newBound = bound[index + 1];*/
-
-        /*if(newWeight <= capacity){*/
-            /*int oldMax = atomicMax(globalBenefit, newBenefit);*/
-        /*}*/
-        
-        /*// printf("bid: %d, processing: %d %u %d, %llu\n", blockIdx.x, -oldBenefit, oldWeight, index, oldSeq);*/
-        /*if(newWeight <= capacity && newBenefit + newBound > *globalBenefit){*/
-            /*int insIndex = atomicAdd(insSize, 1);*/
-            /*// printf("choose 1: %d %u %llu\n", -oldBenefit, oldWeight, oldSeq, -newBenefit, newWeight, ((oldSeq << 1) + 1));*/
-            /*insItem[insIndex].first = -newBenefit;*/
-            /*insItem[insIndex].second = newWeight;*/
-            /*insItem[insIndex].third = index;*/
-/*//            insItem[insIndex].fourth = ((oldSeq << 1) + 1);*/
-        /*}*/
-        /*int newBound1 = ComputeBound(oldBenefit, oldWeight, index, inputSize, capacity, weight, benefit);*/
-        /*// newBound = bound[index + 1];*/
-/*//        printf("%d-%d i: %d 0: %d %d 1: %d %d\n", blockIdx.x, threadIdx.x, index,*/
-/*//				oldWeight <= capacity, oldBenefit + newBound1 > *globalBenefit, */
-/*//				newWeight <= capacity, newBenefit + newBound > *globalBenefit);*/
-        /*// check for 0: reject current item*/
-        /*if(oldWeight <= capacity && oldBenefit + newBound1 > *globalBenefit){*/
-            /*int insIndex = atomicAdd(insSize, 1);*/
-            /*// printf("old: %d %u %llu, choose 0: %d %u %llu\n", -oldBenefit, oldWeight, oldSeq, -oldBenefit, oldWeight, oldSeq << 1);*/
-            /*insItem[insIndex].first = -oldBenefit;*/
-            /*insItem[insIndex].second = oldWeight;*/
-            /*insItem[insIndex].third = index;*/
-/*//            insItem[insIndex].fourth = oldSeq << 1;*/
-        /*}*/
-    /*}*/
-/*}*/
-
 __global__ void oneHeapApplication(Heap<KnapsackItem> *heap, int batchSize, 
                             int *weight, int *benefit, float *benefitPerWeight,
                             int capacity, int inputSize,
-                            int *globalBenefit,
+                            int *globalBenefit, int *activeCount,
                             int *gc_flag, int gc_threshold,
 #ifdef PERF_DEBUG 
                             int *explored_nodes,
@@ -125,6 +33,7 @@ __global__ void oneHeapApplication(Heap<KnapsackItem> *heap, int batchSize,
     bool init = init_flag;
     if (threadIdx.x == 0) {
         heap->tbstate[blockIdx.x] = 1;
+        *delSize = 0;
     }
     __syncthreads();
 
@@ -191,14 +100,17 @@ __global__ void oneHeapApplication(Heap<KnapsackItem> *heap, int batchSize,
         }
         __syncthreads();
         if (threadIdx.x == 0) {
-            *delSize = heap->ifTerminate();
+            atomicAdd(activeCount, (*insSize - *delSize));
+            if (atomicAdd(activeCount, 0) == 0) {
+                *delSize = -1;
+            }
+            /**delSize = heap->ifTerminate();*/
             if (*heap->batchCount > gc_threshold) {
                 *gc_flag  = 1;
             }
         }
         __syncthreads();
-        if (*delSize == 1 || *gc_flag == 1) break;
-
+        if (*delSize == -1 || *gc_flag == 1) break;
     }
 }
 
@@ -224,6 +136,10 @@ void oneheap(int *weight, int *benefit, float *benefitPerWeight,
     int *gc_flag;
     cudaMalloc((void **)&gc_flag, sizeof(int));
     cudaMemset(gc_flag, 0, sizeof(int));
+    int *activeCount;
+    cudaMalloc((void **)&activeCount, sizeof(int));
+    int initActiveCount = 1;
+    cudaMemcpy(activeCount, &initActiveCount, sizeof(int), cudaMemcpyHostToDevice);
 
 	struct timeval startTime, endTime;
 	setTime(&startTime);
@@ -245,7 +161,7 @@ void oneheap(int *weight, int *benefit, float *benefitPerWeight,
         oneHeapApplication<<<blockNum, blockSize, smemOffset>>>(d_heap, batchSize, 
                                                          weight, benefit, benefitPerWeight,
                                                          capacity, inputSize,
-                                                         heap.globalBenefit,
+                                                         heap.globalBenefit, activeCount,
                                                          gc_flag, gc_threshold,
 #ifdef PERF_DEBUG
                                                          explored_nodes,
@@ -283,6 +199,8 @@ void oneheap(int *weight, int *benefit, float *benefitPerWeight,
 #endif
         // reset gc flag
         cudaMemset(gc_flag, 0, sizeof(int));
+        int tmpItemCount = heap.itemCount();
+        cudaMemcpy(activeCount, &tmpItemCount, sizeof(int), cudaMemcpyHostToDevice);
         init_flag = false;
     }
 
@@ -295,6 +213,7 @@ void oneheap(int *weight, int *benefit, float *benefitPerWeight,
     cudaMemcpy((int *)max_benefit, heap.globalBenefit, sizeof(int), cudaMemcpyDeviceToDevice);
     cudaFree(d_heap); d_heap = NULL;
     cudaFree(gc_flag); gc_flag = NULL;
+    cudaFree(activeCount); activeCount = NULL;
 }
 
 #endif
