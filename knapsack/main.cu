@@ -106,9 +106,9 @@ int main(int argc, char *argv[])
                 gc_threshold, max_benefit);
     }
     cudaMemcpy(&max_benefit, d_max_benefit, sizeof(int), cudaMemcpyDeviceToHost);
-
+#ifdef PERF_DEBUG
     cout << max_benefit << endl;
-
+#endif
     delete[] weight; weight = NULL;
     delete[] benefit; benefit = NULL;
     delete[] benefitPerWeight; benefitPerWeight = NULL;

@@ -16,9 +16,7 @@ __global__ void oneBufferApplication(Buffer<KnapsackItem> *buffer, int batchSize
                             int capacity, int inputSize,
                             int *globalBenefit, int *activeCount,
                             int *gc_flag, int gc_threshold,
-#ifdef PERF_DEBUG 
                             int *explored_nodes,
-#endif
                             bool init_flag = true)
 {
     extern __shared__ int smem[];
@@ -69,6 +67,7 @@ __global__ void oneBufferApplication(Buffer<KnapsackItem> *buffer, int batchSize
         if (*delSize > 0) {
             appKernelWrapper(weight, benefit, benefitPerWeight,
                       globalBenefit, inputSize, capacity,
+                      explored_nodes,
                       delItem, delSize,
                       insItem, insSize);
         }
@@ -137,34 +136,34 @@ void onebuffer(int *weight, int *benefit, float *benefitPerWeight,
     cudaMalloc((void **)&activeCount, sizeof(int));
     int initActiveCount = 1;
     cudaMemcpy(activeCount, &initActiveCount, sizeof(int), cudaMemcpyHostToDevice);
-#ifdef PERF_DEBUG
-	struct timeval startTime, endTime;
-	setTime(&startTime);
     int *explored_nodes;
+    int h_explored_nodes = 0;
     cudaMalloc((void **)&explored_nodes, sizeof(int));
     cudaMemset(explored_nodes, 0, sizeof(int));
 
-#endif
+	struct timeval startTime, endTime;
+	setTime(&startTime);
 
     oneBufferApplication<<<blockNum, blockSize, smemOffset>>>(d_buffer, batchSize, 
                                                      weight, benefit, benefitPerWeight,
                                                      capacity, inputSize,
                                                      buffer.globalBenefit, activeCount,
                                                      gc_flag, gc_threshold,
-#ifdef PERF_DEBUG
                                                      explored_nodes,
-#endif
                                                      init_flag);
     cudaDeviceSynchronize();
 
-#ifdef PERF_DEBUG
     setTime(&endTime);
-    cout << getTime(&startTime, &endTime) << endl;
-    int h_explored_nodes;
     cudaMemcpy(&h_explored_nodes, explored_nodes, sizeof(int), cudaMemcpyDeviceToHost);
+#ifdef PERF_DEBUG
+    cout << getTime(&startTime, &endTime) << endl;
     cout << "explored nodes: " << h_explored_nodes << ". buffer usage: ";
     buffer.printBufferPtr();
+#else
+    cudaMemcpy(&h_explored_nodes, explored_nodes, sizeof(int), cudaMemcpyDeviceToHost);
+    cout << getTime(&startTime, &endTime) << " " << h_explored_nodes << endl;
 #endif
+
     cudaMemcpy((int *)max_benefit, buffer.globalBenefit, sizeof(int), cudaMemcpyDeviceToDevice);
     cudaFree(d_buffer); d_buffer = NULL;
     cudaFree(gc_flag); gc_flag = NULL;

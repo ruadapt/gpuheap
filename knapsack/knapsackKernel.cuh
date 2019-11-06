@@ -90,6 +90,7 @@ __device__ void appKernel(int *weight, int *benefit, float *benefitPerWeight,
 // addKernel wrapper which allows items being expanded more than once in smem
 __device__ void appKernelWrapper(int *weight, int *benefit, float *benefitPerWeight,
                               int *max_benefit, int inputSize, int capacity,
+                              int *explored_nodes,
                               KnapsackItem *delItems, int *delSize,
                               KnapsackItem *insItems, int *insSize)
 {
@@ -119,6 +120,7 @@ __device__ void appKernelWrapper(int *weight, int *benefit, float *benefitPerWei
         }
         __syncthreads();
         if (threadIdx.x == 0) {
+            atomicAdd(explored_nodes, *insSize);
             *delSize = *insSize;
             *insSize = 0;
         }
