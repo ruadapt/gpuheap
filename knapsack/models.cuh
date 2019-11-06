@@ -19,9 +19,7 @@ __global__ void oneHeapApplicationEarlyStop(Heap<KnapsackItem> *heap, int batchS
                             int capacity, int inputSize,
                             int *globalBenefit, int *activeCount,
                             int *gc_flag, int gc_threshold, int max_benefit,
-#ifdef PERF_DEBUG 
                             int *explored_nodes,
-#endif
                             bool init_flag = true)
 {
     extern __shared__ int smem[];
@@ -89,12 +87,10 @@ __global__ void oneHeapApplicationEarlyStop(Heap<KnapsackItem> *heap, int batchS
 #endif
 
         if (*insSize > 0) {
-#ifdef PERF_DEBUG 
             if (threadIdx.x == 0) {
                 atomicAdd(explored_nodes, *insSize);
             }
             __syncthreads();
-#endif
             for (int batchOffset = 0; batchOffset < *insSize; batchOffset += batchSize) {
                 int partialSize = min(batchSize, *insSize - batchOffset);
                 heap->insertion(insItem + batchOffset, partialSize, smemOffset);
@@ -148,11 +144,10 @@ void oneheapearlystop(int *weight, int *benefit, float *benefitPerWeight,
 	struct timeval startTime, endTime;
     double heapTime = 0, fifoTime = 0;
 	setTime(&startTime);
-#ifdef PERF_DEBUG
     int *explored_nodes;
     cudaMalloc((void **)&explored_nodes, sizeof(int));
     cudaMemset(explored_nodes, 0, sizeof(int));
-
+#ifdef PERF_DEBUG
     struct timeval appStartTime, appEndTime;
     double appTime = 0;
     struct timeval gcStartTime, gcEndTime;
@@ -162,6 +157,7 @@ void oneheapearlystop(int *weight, int *benefit, float *benefitPerWeight,
 
     // TODO: change the name
     int tmpItemCount = 0, tmpBenefit = 0;
+    int h_explored_nodes = 0;
 
     while (1) {
 #ifdef PERF_DEBUG
@@ -172,9 +168,7 @@ void oneheapearlystop(int *weight, int *benefit, float *benefitPerWeight,
                                                          capacity, inputSize,
                                                          heap.globalBenefit, activeCount,
                                                          gc_flag, gc_threshold, global_max_benefit,
-#ifdef PERF_DEBUG
                                                          explored_nodes,
-#endif
                                                          init_flag);
         cudaDeviceSynchronize();
         init_flag = false;
@@ -186,7 +180,6 @@ void oneheapearlystop(int *weight, int *benefit, float *benefitPerWeight,
         cudaMemcpy(&batchCount, heap.batchCount, sizeof(int), cudaMemcpyDeviceToHost);
         int cur_benefit = 0;
         cudaMemcpy(&cur_benefit, heap.globalBenefit, sizeof(int), cudaMemcpyDeviceToHost);
-        int h_explored_nodes = 0;
         cudaMemcpy(&h_explored_nodes, explored_nodes, sizeof(int), cudaMemcpyDeviceToHost);
         cout << appTime << " " << batchCount << " " << cur_benefit << " " << h_explored_nodes << " "; 
 #endif
@@ -225,8 +218,12 @@ void oneheapearlystop(int *weight, int *benefit, float *benefitPerWeight,
 #endif
     setTime(&endTime);
     heapTime = getTime(&startTime, &endTime);
+#ifdef PERF_DEBUG
     cout << "heap time: " << heapTime << endl;
-
+#else
+    cudaMemcpy(&h_explored_nodes, explored_nodes, sizeof(int), cudaMemcpyDeviceToHost);
+    cout << heapTime << " " << h_explored_nodes << " ";
+#endif
     if (tmpItemCount != 0) {
         // we switch to the fifo queue mode
 
@@ -251,24 +248,25 @@ void oneheapearlystop(int *weight, int *benefit, float *benefitPerWeight,
                                                          capacity, inputSize,
                                                          buffer.globalBenefit, activeCount,
                                                          gc_flag, gc_threshold,
-#ifdef PERF_DEBUG
                                                          explored_nodes,
-#endif
                                                          init_flag);
         cudaDeviceSynchronize();
 
         setTime(&endTime);
         fifoTime = getTime(&startTime, &endTime);
+        cudaMemcpy(&h_explored_nodes, explored_nodes, sizeof(int), cudaMemcpyDeviceToHost);
+#ifdef PERF_DEBUG
         cout << "gc time: " << fifoTime << endl;
+#else
+        cout << fifoTime << " " << h_explored_nodes << " " << heapTime + fifoTime << endl;
+#endif
         cudaMemcpy((int *)max_benefit, buffer.globalBenefit, sizeof(int), cudaMemcpyDeviceToDevice);
         cudaFree(d_buffer); d_buffer = NULL;
     }
 
-
-    int h_explored_nodes;
-    cudaMemcpy(&h_explored_nodes, explored_nodes, sizeof(int), cudaMemcpyDeviceToHost);
+#ifdef PERF_DEBUG
     cout << "total time: " << heapTime + fifoTime << " explored nodes: " << h_explored_nodes << endl;
-
+#endif
     cudaFree(d_heap); d_heap = NULL;
     cudaFree(gc_flag); gc_flag = NULL;
     cudaFree(activeCount); activeCount = NULL;
