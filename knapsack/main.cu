@@ -33,8 +33,7 @@ int main(int argc, char *argv[])
     int blockSize = atoi(argv[5]);
     int gc_threshold = atoi(argv[6]);
     int model = atoi(argv[7]);
-    /*int delAllowed = atoi(argv[7]);*/
-    /*int gcThreshold = atoi(argv[8]);*/
+    int has_maxbenefit = atoi(argv[8]);
     /*int expandThreshold = atoi(argv[9]);*/
     /*int endingBlockNum = atoi(argv[10]);*/
 
@@ -46,6 +45,7 @@ int main(int argc, char *argv[])
     int *weight = new int[inputSize];
     int *benefit = new int[inputSize];
     float *benefitPerWeight = new float[inputSize];
+    int max_benefit = 0;
 
     for (int i = 0; i < inputSize; i++) {
         inputFile >> benefit[i] >> weight[i];
@@ -53,6 +53,12 @@ int main(int argc, char *argv[])
     }
 
     inputFile.close();
+
+    if (has_maxbenefit == 1) {
+        inputFile.open(strcat(argv[1], ".res"));
+        inputFile >> max_benefit;
+        inputFile.close();
+    }
 
 	// Sort items by ppw
 	KnapsackItem *items = new KnapsackItem[inputSize];
@@ -77,10 +83,9 @@ int main(int argc, char *argv[])
     cudaMemcpy(d_benefit, benefit, sizeof(int) * inputSize, cudaMemcpyHostToDevice);
     cudaMemcpy(d_benefitPerWeight, benefitPerWeight, sizeof(float) * inputSize, cudaMemcpyHostToDevice);
 
-    int max_benefit = 0;
     int *d_max_benefit;
     cudaMalloc((void **)&d_max_benefit, sizeof(int));
-    cudaMemcpy(d_max_benefit, &max_benefit, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemset(d_max_benefit, 0, sizeof(int));
 
     if (model == 0) /* heap */ {
         oneheap(d_weight, d_benefit, d_benefitPerWeight,
@@ -93,12 +98,14 @@ int main(int argc, char *argv[])
                 batchNum, batchSize, blockNum, blockSize,
                 gc_threshold);
     } else if (model == 2) /* heap + fifo queue */ {
-        oneheap(d_weight, d_benefit, d_benefitPerWeight,
-                d_max_benefit, capacity, inputSize,
-                batchNum, batchSize, blockNum, blockSize,
-                gc_threshold);
-        cudaMemcpy(&max_benefit, d_max_benefit, sizeof(int), cudaMemcpyDeviceToHost);
-        cudaMemset(d_max_benefit, 0, sizeof(int));
+        if (has_maxbenefit == 0) {
+            oneheap(d_weight, d_benefit, d_benefitPerWeight,
+                    d_max_benefit, capacity, inputSize,
+                    batchNum, batchSize, blockNum, blockSize,
+                    gc_threshold);
+            cudaMemcpy(&max_benefit, d_max_benefit, sizeof(int), cudaMemcpyDeviceToHost);
+            cudaMemset(d_max_benefit, 0, sizeof(int));
+        }
 
         oneheapearlystop(d_weight, d_benefit, d_benefitPerWeight,
                 d_max_benefit, capacity, inputSize,
