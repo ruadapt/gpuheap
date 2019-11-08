@@ -58,6 +58,30 @@ class Heap {
             cudaMemset(terminate, 0, sizeof(uint32_t));
 #endif
         }
+		
+		void reset() {
+			K *tmp = new K[batchSize * (batchNum + 1)];
+            for (int i = 0; i < (batchNum + 1) * batchSize; i++) {
+                tmp[i] = INIT_LIMITS;
+            }
+            cudaMemcpy(heapItems, tmp, sizeof(K) * batchSize * (batchNum + 1), cudaMemcpyHostToDevice);
+            delete []tmp; tmp = NULL;
+
+            cudaMemset(status, AVAIL, sizeof(int) * (batchNum + 1));
+
+            cudaMemset(batchCount, 0, sizeof(int));
+            cudaMemset(partialBufferSize, 0, sizeof(int));
+#ifdef HEAP_SORT
+            cudaMemset(deleteCount, 0, sizeof(int));
+#endif
+#ifdef PBS_MODEL
+            cudaMemset(globalBenefit, 0, sizeof(int));
+            cudaMemset(tbstate, 0, 1024 * sizeof(uint32_t));
+            uint32_t tmp1 = 1;
+            cudaMemcpy(tbstate, &tmp1, sizeof(uint32_t), cudaMemcpyHostToDevice);
+            cudaMemset(terminate, 0, sizeof(uint32_t));
+#endif
+		}
 
         ~Heap() {
             cudaFree(heapItems);

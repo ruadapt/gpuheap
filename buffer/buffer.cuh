@@ -79,6 +79,13 @@ beginPos------------readPos------writePos------------endPos
     /*}*/
 #endif
 
+    int getBufferSize() {
+        unsigned long long int h_begin, h_end;
+        cudaMemcpy(&h_begin, begPos, sizeof(unsigned long long int), cudaMemcpyDeviceToHost);
+        cudaMemcpy(&h_end, endPos, sizeof(unsigned long long int), cudaMemcpyDeviceToHost);
+        return (int)(h_end - h_begin);
+    }
+
     void printBufferPtr() {
         unsigned long long int h_read, h_write, h_begin, h_end;
         cudaMemcpy(&h_read, readPos, sizeof(unsigned long long int), cudaMemcpyDeviceToHost);
@@ -124,7 +131,7 @@ beginPos------------readPos------writePos------------endPos
                                    int size,
                                    int smemOffset) {
         extern __shared__ int s[];
-        int *insertStartPos = (int *)&s[smemOffset];
+        unsigned long long int *insertStartPos = (unsigned long long int *)&s[smemOffset];
         int *numItemsForRound = (int *)&insertStartPos[1];
 
         if (!threadIdx.x) {
@@ -166,7 +173,7 @@ beginPos------------readPos------writePos------------endPos
                                      int &size,
                                      int smemOffset) {
         extern __shared__ int s[];
-        int *deleteStartPos = (int *)&s[smemOffset];
+        unsigned long long int *deleteStartPos = (unsigned long long int *)&s[smemOffset];
         int *deleteSize = (int *)&deleteStartPos[1];
 
         if (!threadIdx.x) {
