@@ -7,12 +7,12 @@ TD_HEAP_DIR=../heap/tditdd/
 BU_HEAP_DIR=../heap/buitdd/
 BUFFER_DIR=../buffer/
 
-all: knapsack
+all: knapsack knapsack_debug
 
-knapsack: main.cu models.cuh models_fifo.cuh models_pq.cuh gc.cuh
+knapsack: main.cu models.cuh models_fifo.cuh models_pq.cuh models_pq_fifo.cuh gc.cuh
 	${NVCC} ${NVCCFLAG} -I${TD_HEAP_DIR} -I${BUFFER_DIR} ${KNAPSACK_FLAG} $< -o $@
 
-knapsack_debug: main.cu models.cuh models_fifo.cuh models_pq.cuh gc.cuh
+knapsack_debug: main.cu models.cuh models_fifo.cuh models_pq.cuh models_pq_fifo.cuh gc.cuh
 	${NVCC} ${NVCCFLAG} -I${TD_HEAP_DIR} -I${BUFFER_DIR} ${KNAPSACK_FLAG} ${DEBUG_FLAG} $< -o $@
 
 #knapsack_fifo: main.cu models_fifo.cuh

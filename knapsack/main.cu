@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "models.cuh"
+#include "models_pq_fifo.cuh"
 #include "models_pq.cuh"
 #include "models_fifo.cuh"
 #include "util.cuh"
@@ -111,11 +112,14 @@ int main(int argc, char *argv[])
                 d_max_benefit, capacity, inputSize,
                 batchNum, batchSize, blockNum, blockSize,
                 gc_threshold, max_benefit);
+    } else if (model == 3) /* heap + fifo switch */ {
+        oneheapfifoswitch(d_weight, d_benefit, d_benefitPerWeight,
+                d_max_benefit, capacity, inputSize,
+                batchNum, batchSize, blockNum, blockSize,
+                gc_threshold);
     }
     cudaMemcpy(&max_benefit, d_max_benefit, sizeof(int), cudaMemcpyDeviceToHost);
-#ifdef PERF_DEBUG
     cout << max_benefit << endl;
-#endif
     delete[] weight; weight = NULL;
     delete[] benefit; benefit = NULL;
     delete[] benefitPerWeight; benefitPerWeight = NULL;

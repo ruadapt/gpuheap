@@ -59,12 +59,12 @@ __global__ void garbageCollection(Heap<KnapsackItem> *heap, int batchSize, int b
 
 }
 
-__global__ void HeapInsert(Heap<KnapsackItem> *heap, KnapsackItem *insItems, int *insSize, int batchSize){	
-	if(!(*insSize))
+__global__ void HeapInsert(Heap<KnapsackItem> *heap, KnapsackItem *insItems, int insSize, int batchSize){	
+	if(insSize == 0)
 		return;
-	int batchNeed = (*insSize + batchSize - 1) / batchSize;
+	int batchNeed = (insSize + batchSize - 1) / batchSize;
     for (int i = blockIdx.x; i < batchNeed; i += gridDim.x) {
-        int size = min(batchSize, *insSize - i * batchSize);
+        int size = min(batchSize, insSize - i * batchSize);
         heap->insertion(insItems + i * batchSize,
                         size, 0);
         __syncthreads();
@@ -101,7 +101,10 @@ void invalidFilter(Heap<KnapsackItem> &heap, Heap<KnapsackItem> *d_heap, int bat
                                                 insItems, insSize);
     cudaDeviceSynchronize();
 
-    HeapInsert<<<blockNum, blockSize, smemOffset>>>(d_heap, insItems, insSize, batchSize);
+    int h_insSize;
+    cudaMemcpy(&h_insSize, insSize, sizeof(int), cudaMemcpyDeviceToHost);
+
+    HeapInsert<<<blockNum, blockSize, smemOffset>>>(d_heap, insItems, h_insSize, batchSize);
     cudaDeviceSynchronize();
 
     cudaFree(insItems); insItems = NULL;

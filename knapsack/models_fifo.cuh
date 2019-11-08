@@ -160,8 +160,7 @@ void onebuffer(int *weight, int *benefit, float *benefitPerWeight,
     cout << "explored nodes: " << h_explored_nodes << ". buffer usage: ";
     buffer.printBufferPtr();
 #else
-    cudaMemcpy(&h_explored_nodes, explored_nodes, sizeof(int), cudaMemcpyDeviceToHost);
-    cout << getTime(&startTime, &endTime) << " " << h_explored_nodes << endl;
+    cout << getTime(&startTime, &endTime) << endl;
 #endif
 
     cudaMemcpy((int *)max_benefit, buffer.globalBenefit, sizeof(int), cudaMemcpyDeviceToDevice);
