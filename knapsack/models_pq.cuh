@@ -203,7 +203,7 @@ void oneheap(int *weight, int *benefit, float *benefitPerWeight,
 #endif
     cudaMemcpy(&h_explored_nodes, explored_nodes, sizeof(int), cudaMemcpyDeviceToHost);
 	setTime(&endTime);
-	cout << getTime(&startTime, &endTime) << " " << h_explored_nodes << " ";
+//	cout << getTime(&startTime, &endTime) << " " << h_explored_nodes << " ";
     cudaMemcpy((int *)max_benefit, heap.globalBenefit, sizeof(int), cudaMemcpyDeviceToDevice);
     cudaFree(d_heap); d_heap = NULL;
     cudaFree(gc_flag); gc_flag = NULL;

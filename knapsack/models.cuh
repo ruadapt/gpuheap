@@ -261,14 +261,13 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
     cudaMemset(explored_nodes, 0, sizeof(int));
 	
 	int remainItemCount = INT_MAX;
+    int tmpItemCountBefore, tmpItemCountAfter;
     int currentBenefit = 0;
-
-#ifdef PERF_DEBUG 
+    
     struct timeval heapStartTime, heapEndTime;
     struct timeval gcStartTime, gcEndTime;
     struct timeval bufferStartTime, bufferEndTime;
     double heapTime = 0, gcTime = 0, bufferTime = 0;
-#endif
 	
 	while (remainItemCount != 0) {
 		/* ============= switch to the fifo queue mode ============= */
@@ -278,23 +277,23 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
 		if (init_flag == false) {
             /* reset heap */
             heap.reset();
+            /* update benefit */
+            cudaMemcpy(heap.globalBenefit, &currentBenefit, sizeof(int), cudaMemcpyHostToDevice);
 			/* move items from buffer to heap */
             unsigned long long int begPos;
             cudaMemcpy(&begPos, buffer.begPos, sizeof(unsigned long long int), cudaMemcpyDeviceToHost);
 			HeapInsert<<<blockNum, blockSize, smemOffset>>>(d_heap, buffer.bufferItems + begPos, remainItemCount, batchSize);
 			cudaDeviceSynchronize();
-            /* update benefit */
-            cudaMemcpy(heap.globalBenefit, &currentBenefit, sizeof(int), cudaMemcpyHostToDevice);
+            int new_gc_threshold = remainItemCount / batchSize / 10 + remainItemCount / batchSize;
+            gc_threshold = gc_threshold > new_gc_threshold ? gc_threshold : new_gc_threshold;
 		}
 #ifdef PERF_DEBUG
-        cout << "done\n";
+        cout << "done.. \nnew gc threshold " << gc_threshold << "\n";
         heap.checkInsertHeap();
 #endif
 		/* heap-based knapsack */
 		while (remainItemCount != 0) {
-#ifdef PERF_DEBUG
             setTime(&heapStartTime);
-#endif
             oneHeapApplicationMixed<<<blockNum, blockSize, smemOffset>>>(d_heap, batchSize, 
 															 weight, benefit, benefitPerWeight,
 															 capacity, inputSize,
@@ -303,11 +302,12 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
 															 explored_nodes,
 															 init_flag);
 			cudaDeviceSynchronize();
-#ifdef PERF_DEBUG
             setTime(&heapEndTime);
             heapTime += getTime(&heapStartTime, &heapEndTime);
-            cout << "before gc: " << heap.itemCount() / batchSize << " ";
             setTime(&gcStartTime);
+            tmpItemCountBefore = heap.itemCount();
+ #ifdef PERF_DEBUG
+           cout << "before gc: " << heap.itemCount() << " | " << heap.itemCount() / batchSize << " ";
 #endif
 			init_flag = false;
 
@@ -321,11 +321,12 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
 			// check if we should go to buffer
 			int h_gc_flag;
 			cudaMemcpy(&h_gc_flag, gc_flag, sizeof(int), cudaMemcpyDeviceToHost);
-
-#ifdef PERF_DEBUG 
+            tmpItemCountAfter = heap.itemCount();
+            if (tmpItemCountAfter > tmpItemCountBefore / 2) gc_threshold *= 2;
             setTime(&gcEndTime);
             gcTime += getTime(&gcStartTime, &gcEndTime);
-            cout << "after gc: " << heap.itemCount() / batchSize 
+#ifdef PERF_DEBUG
+            cout << "after gc: " << heap.itemCount() << " | " << heap.itemCount() / batchSize
                 << " benefit: " << currentBenefit << " gc flag: " << h_gc_flag << endl;
 #endif
 
@@ -356,9 +357,9 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
 		cudaMemcpy(buffer.globalBenefit, &currentBenefit, sizeof(int), cudaMemcpyHostToDevice);	
 #ifdef PERF_DEBUG
         cout << "done\n";
-        setTime(&bufferStartTime);
 #endif
-		oneBufferApplicationMixed<<<blockNum, blockSize, smemOffset>>>(d_buffer, batchSize, 
+        setTime(&bufferStartTime);
+		oneBufferApplicationMixed<<<32, blockSize, smemOffset>>>(d_buffer, batchSize, 
 														 weight, benefit, benefitPerWeight,
 														 capacity, inputSize,
 														 buffer.globalBenefit, activeCount,
@@ -366,29 +367,42 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
 														 explored_nodes,
 														 init_flag);
 		cudaDeviceSynchronize();
-#ifdef PERF_DEBUG
         setTime(&bufferEndTime);
         bufferTime += getTime(&bufferStartTime, &bufferEndTime);
-#endif		
 		remainItemCount = buffer.getBufferSize();
 
+#ifdef PERF_DEBUG
+        cout << "items from buffer: " << remainItemCount << " global benefit: " << currentBenefit << endl;
+        cout << "fifo time: " << getTime(&bufferStartTime, &bufferEndTime) << endl;
+        setTime(&gcStartTime);
+#endif
+        invalidFilterBuffer(buffer, d_buffer, batchSize,
+                weight, benefit, benefitPerWeight,
+                capacity, inputSize,
+                buffer.globalBenefit);
+		remainItemCount = buffer.getBufferSize();
+#ifdef PERF_DEBUG
+        setTime(&gcEndTime);
+        gcTime += getTime(&gcStartTime, &gcEndTime);
+        cout << "gc time: " << getTime(&gcStartTime, &gcEndTime) << " after gc: " << remainItemCount << endl;
+//        buffer.printBufferPtr();
+#endif
 		// reset gc flag
 		cudaMemset(gc_flag, 0, sizeof(int));
 		// reset activeCount
 		cudaMemcpy(activeCount, &remainItemCount, sizeof(int), cudaMemcpyHostToDevice);
         cudaMemcpy(&currentBenefit, buffer.globalBenefit, sizeof(int), cudaMemcpyDeviceToHost);
-#ifdef PERF_DEBUG
-        cout << "items from buffer: " << remainItemCount << " global benefit: " << currentBenefit << endl;
-        cout << "fifo time: " << getTime(&bufferStartTime, &bufferEndTime) << endl;
-#endif
-	}
+    }
 
     setTime(&endTime);
     cudaMemcpy(&h_explored_nodes, explored_nodes, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(max_benefit, &currentBenefit, sizeof(int), cudaMemcpyHostToDevice);
-    cout << getTime(&startTime, &endTime) << " " << h_explored_nodes << " " << currentBenefit << endl;
 #ifdef PERF_DEBUG
     cout << "heap time: " << heapTime << " gc time: " << gcTime << " fifo time: " << bufferTime << endl;
+    cout << heapTime + gcTime + bufferTime << endl;
+#else
+    cout << heapTime << " " << gcTime << " " << bufferTime << " " 
+        << getTime(&startTime, &endTime) << " " << h_explored_nodes << " ";
 #endif
     cudaFree(d_heap); d_heap = NULL;
 	cudaFree(d_buffer); d_buffer = NULL;

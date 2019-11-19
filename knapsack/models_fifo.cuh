@@ -10,7 +10,6 @@
 #include "knapsackKernel.cuh"
 
 using namespace std;
-
 __global__ void oneBufferApplication(Buffer<KnapsackItem> *buffer, int batchSize, 
                             int *weight, int *benefit, float *benefitPerWeight,
                             int capacity, int inputSize,
@@ -102,6 +101,7 @@ __global__ void oneBufferApplication(Buffer<KnapsackItem> *buffer, int batchSize
             }
 #ifdef PERF_DEBUG 
             atomicAdd(explored_nodes, *insSize);
+//            if (blockIdx.x == 0) printf("explored %d\n", *explored_nodes);
 #endif
         }
         __syncthreads();

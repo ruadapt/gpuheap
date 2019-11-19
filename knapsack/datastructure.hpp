@@ -48,6 +48,27 @@ struct KnapsackItem {
                 third != rhs.third)|| fourth != rhs.fourth;
     }
 
+    // rewrite this if you need more accurate comparison
+    //__host__ __device__ bool operator<(const KnapsackItem &rhs) const {
+        //return (fourth < rhs.fourth);
+    //}
+    //__host__ __device__ bool operator<=(const KnapsackItem &rhs) const {
+        //return (fourth <= rhs.fourth);
+    //}
+    //__host__ __device__ bool operator>(const KnapsackItem &rhs) const {
+        //return (fourth > rhs.fourth);
+    //}
+    //__host__ __device__ bool operator>=(const KnapsackItem &rhs) const {
+        //return (fourth >= rhs.fourth);
+    //}
+    //__host__ __device__ bool operator==(const KnapsackItem &rhs) const {
+        //return (fourth == rhs.fourth);
+    //}
+    //__host__ __device__ bool operator!=(const KnapsackItem &rhs) const {
+        //return (first != rhs.first || second != rhs.second ||
+                //third != rhs.third)|| fourth != rhs.fourth;
+    //}
+
 
 };
 
