@@ -25,8 +25,8 @@ int main(int argc, char *argv[]) {
 	uint32_t block_size = atoi(argv[7]);
 	astar::AstarMap map(map_h, map_w, block_rate);
 */
-	if (argc != 6) {
-        fprintf(stderr, "Usage: ./astar [mapH] [mapW] [block_rate] [batchNum] [batchSize] [blockNum] [blockSize]\n");
+	if (argc != 7) {
+        fprintf(stderr, "Usage: ./astar [map_file] [batchNum] [batchSize] [blockNum] [blockSize] [seq_flag] [mode: 0/pq]\n");
         return 1;
     }
 
@@ -34,7 +34,9 @@ int main(int argc, char *argv[]) {
     uint32_t batch_size = atoi(argv[3]);
     uint32_t block_num = atoi(argv[4]);
     uint32_t block_size = atoi(argv[5]);
+    bool seq_flag = atoi(argv[6]) == 1 ? true : false;
     astar::AstarMap map(argv[1]);
+    uint32_t mode = atoi(argv[7]);
     uint32_t map_h = map.h_;
     uint32_t map_w = map.w_;
 
@@ -53,27 +55,30 @@ int main(int argc, char *argv[]) {
 											&heap, &app_item);
 	astar::PQModel<astar::AstarItem> *d_model;
 	cudaMalloc((void **)&d_model, sizeof(astar::PQModel<astar::AstarItem>));
-	cudaMemcpy(d_model, &h_model, sizeof(astar::PQModel<astar::AstarItem>), cudaMemcpyHostToDevice);
-
-    // Start handling sequential astar.
-    uint32_t *seq_map = new uint32_t[map.size_]();
-    cudaMemcpy(seq_map, map.d_map, map.size_ * sizeof(uint32_t), cudaMemcpyDeviceToHost);
-
-    setTime(&start_time);
 
     vector<uint32_t> g_list(map_h * map_w, UINT_MAX);
-    seq_astar::SeqAstarSearch1(seq_map, map_h, map_w, g_list);
-    uint32_t seq_path_weight = g_list[map_h * map_w - 1];
-    if (seq_path_weight == UINT_MAX) {
-        printf("No Available Path\n");
-    } else {
-        printf("Sequential Result: %u\n", seq_path_weight);
-    }
-    setTime(&end_time);
-    printf("Sequential Time: %.4f ms\n", getTime(&start_time, &end_time));
-    delete []seq_map;
-    // End handling sequential astar.
+    if (seq_flag == true) {
+        // Start handling sequential astar.
+        uint32_t *seq_map = new uint32_t[map.size_]();
+        cudaMemcpy(seq_map, map.d_map, map.size_ * sizeof(uint32_t), cudaMemcpyDeviceToHost);
 
+        setTime(&start_time);
+
+        seq_astar::SeqAstarSearch1(seq_map, map_h, map_w, g_list);
+        uint32_t seq_path_weight = g_list[map_h * map_w - 1];
+        if (seq_path_weight == UINT_MAX) {
+            printf("No Available Path\n");
+        } else {
+            h_model.seq_path_weight_ = seq_path_weight;
+            printf("Sequential Result: %u\n", seq_path_weight);
+        }
+        setTime(&end_time);
+        printf("Sequential Time: %.4f ms\n", getTime(&start_time, &end_time));
+        delete []seq_map;
+        // End handling sequential astar.
+    }
+
+    cudaMemcpy(d_model, &h_model, sizeof(astar::PQModel<astar::AstarItem>), cudaMemcpyHostToDevice);
 	size_t smemSize = batch_size * sizeof(astar::AstarItem) // del_items
 					+ 2 * sizeof(uint32_t) // ins_size, del_size
 					+ 5 * batch_size * sizeof(astar::AstarItem); // ins/del operations
@@ -87,15 +92,17 @@ int main(int argc, char *argv[]) {
     printf("Init Time: %.4f ms\n", getTime(&start_time, &end_time));
     setTime(&start_time);
 
-	astar::Run<astar::AstarItem><<<block_num, block_size, smemSize>>>(d_model);
-	cudaDeviceSynchronize();
+    if (mode == /* pure pq mode */ 0) {
+        astar::Run<astar::AstarItem><<<block_num, block_size, smemSize>>>(d_model);
+        cudaDeviceSynchronize();
+    }
 
     setTime(&end_time);
     printf("Run Time: %.4f ms\n", getTime(&start_time, &end_time));
 
     cudaMemcpy(&h_model, d_model, sizeof(astar::PQModel<astar::AstarItem>), cudaMemcpyDeviceToHost);
     cudaMemcpy(&app_item, h_model.d_app_item_, sizeof(astar::AppItem), cudaMemcpyDeviceToHost);
-#ifdef DEBUG
+#ifdef DEBUGi
     uint32_t *h_dist = new uint32_t[map_h * map_w];
     cudaMemcpy(h_dist, app_item.d_dist, map_h * map_w * sizeof(uint32_t), cudaMemcpyDeviceToHost);
     uint32_t visited_nodes_count = 0;
@@ -106,7 +113,7 @@ int main(int argc, char *argv[]) {
     uint32_t tmp_counter = 0;
     for (int i = 0; i < map_h * map_w; ++i) {
         if (h_dist[i] == UINT_MAX && g_list[i] != UINT_MAX) {
-            if (g_list[i] + (map_h + map_w - 2 - i % map_h - i / map_w) >= seq_path_weight) {
+            if (g_list[i] + (map_h + map_w - 2 - i % map_h - i / map_w) >= h_model.seq_path_weight_) {
                 tmp_counter++;
             }
         }
@@ -120,10 +127,12 @@ int main(int argc, char *argv[]) {
     } else {
         printf("Gpu Result: %u\n", gpu_path_weight);
     }
-    if (seq_path_weight != gpu_path_weight) {
+    if (h_model.seq_path_weight_ != gpu_path_weight) {
         printf("Error: Sequential Result (%u) is not equal to GPU Result (%u).\n", 
-                seq_path_weight, gpu_path_weight);
+                h_model.seq_path_weight_, gpu_path_weight);
     }
+
+    cudaFree(d_model); d_model = NULL;
 /*
     astar::RunRemain<astar::AstarItem><<<block_num, block_size, smemSize>>>(d_model);
     cudaDeviceSynchronize();

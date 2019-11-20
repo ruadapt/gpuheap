@@ -8,6 +8,7 @@
 
 #ifdef DEBUG
 __device__ uint32_t explored_node_number;
+__device__ uint32_t opt_flag;
 #endif
 
 namespace astar {
@@ -130,6 +131,8 @@ public:
 	uint32_t batch_num_;
 	uint32_t batch_size_;
 
+    uint32_t seq_path_weight_;
+
 	HeapItem *ins_items;
 };
 
@@ -148,6 +151,7 @@ __global__ void Init(PQModel<HeapItem> *model) {
 #ifdef DEBUG
     if (blockIdx.x == 0 && threadIdx.x == 0) {
         explored_node_number = 0;
+        opt_flag = 0;
     }
 #endif
 }
@@ -171,6 +175,7 @@ __global__ void Run(PQModel<HeapItem> *model) {
 	
 	while(!d_heap->ifTerminate()) {
         if (threadIdx.x == 0) {
+            // del_size is temporarily used to store target node distance
     		*del_size = model->d_app_item_->d_dist[model->d_app_item_->d_map->target_];
         }
         __syncthreads();
@@ -193,6 +198,11 @@ __global__ void Run(PQModel<HeapItem> *model) {
 #ifdef DEBUG
         if (threadIdx.x == 0) {
             atomicAdd(&explored_node_number, *ins_size);
+            if (model->seq_path_weight_ == app_t_val) {
+                if (atomicCAS(&opt_flag, 0, 1) == 0) {
+                    printf("explored_nodes_number before opt is found: %u\n", explored_node_number);
+                }
+            }
         }
         __syncthreads();
 #endif

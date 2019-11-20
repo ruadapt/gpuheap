@@ -185,6 +185,7 @@ void SeqAstarSearch1(uint32_t *map, uint32_t h, uint32_t w, vector<uint32_t> &g_
     open_list.push(GenerateItem(H(0, h, w), 0));
 #ifdef DEBUG
     uint32_t explored_nodes_number = 0;
+    uint32_t max_open_list_size = 0;
 #endif
     while (!open_list.empty()) {
         uint64_t item = open_list.top();
@@ -256,6 +257,7 @@ void SeqAstarSearch1(uint32_t *map, uint32_t h, uint32_t w, vector<uint32_t> &g_
         }
 #ifdef DEBUG
         explored_nodes_number += (open_list.size() - origin_size);
+        max_open_list_size = max_open_list_size < open_list.size() ? open_list.size() : max_open_list_size;
 #endif
     }
 #ifdef DEBUG
@@ -265,6 +267,7 @@ void SeqAstarSearch1(uint32_t *map, uint32_t h, uint32_t w, vector<uint32_t> &g_
         if (n == 1) visted_nodes_number++;
     }
     printf("visted_nodes_number: %u\n", visted_nodes_number);
+    printf("max open list size: %u\n", max_open_list_size);
 #endif
     return;
 }
