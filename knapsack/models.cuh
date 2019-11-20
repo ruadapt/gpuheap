@@ -282,7 +282,7 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
 			/* move items from buffer to heap */
             unsigned long long int begPos;
             cudaMemcpy(&begPos, buffer.begPos, sizeof(unsigned long long int), cudaMemcpyDeviceToHost);
-			HeapInsert<<<blockNum, blockSize, smemOffset>>>(d_heap, buffer.bufferItems + begPos, remainItemCount, batchSize);
+			HeapInsert<<<32, blockSize, smemOffset>>>(d_heap, buffer.bufferItems + begPos, remainItemCount, batchSize);
 			cudaDeviceSynchronize();
             int new_gc_threshold = remainItemCount / batchSize / 10 + remainItemCount / batchSize;
             gc_threshold = gc_threshold > new_gc_threshold ? gc_threshold : new_gc_threshold;
@@ -398,8 +398,9 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
     cudaMemcpy(&h_explored_nodes, explored_nodes, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(max_benefit, &currentBenefit, sizeof(int), cudaMemcpyHostToDevice);
 #ifdef PERF_DEBUG
-    cout << "heap time: " << heapTime << " gc time: " << gcTime << " fifo time: " << bufferTime << endl;
+    cout << "heap time: " << heapTime << " gc time: " << gcTime << " fifo time: " << bufferTime << " pure total time: ";
     cout << heapTime + gcTime + bufferTime << endl;
+    cout << getTime(&startTime, &endTime) << " " << h_explored_nodes << endl;
 #else
     cout << heapTime << " " << gcTime << " " << bufferTime << " " 
         << getTime(&startTime, &endTime) << " " << h_explored_nodes << " ";

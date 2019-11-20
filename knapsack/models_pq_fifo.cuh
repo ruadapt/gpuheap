@@ -43,7 +43,7 @@ __global__ void oneHeapApplicationEarlyStop(Heap<KnapsackItem> *heap, int batchS
         delItem[0].first = 0;
         delItem[0].second = 0;
         delItem[0].third = -1;
-        delItem[0].fourth = -SHRT_MAX;
+        delItem[0].fourth = -INT_MAX;
     }
     __syncthreads();
 

@@ -16,11 +16,11 @@ struct uint128 {
     short third;
     short fourth;
 
-    __host__ __device__ uint128(int a = 0, int b = 0, uint32 c = 0, uint64 d = 0)
+    uint128(int a = 0, int b = 0, uint32 c = 0, uint64 d = 0)
         : first(a), second(b), third(c), fourth(d) {
     }
 
-    __host__ __device__ uint128& operator=(const uint128 &rhs) {
+    uint128& operator=(const uint128 &rhs) {
         first = rhs.first;
         second = rhs.second;
         third = rhs.third;
@@ -29,22 +29,22 @@ struct uint128 {
     }
 
     // rewrite this if you need more accurate comparison
-    __host__ __device__ bool operator<(const uint128 &rhs) const {
+    bool operator<(const uint128 &rhs) const {
         return (first < rhs.first);
     }
-    __host__ __device__ bool operator<=(const uint128 &rhs) const {
+    bool operator<=(const uint128 &rhs) const {
         return (first <= rhs.first);
     }
-    __host__ __device__ bool operator>(const uint128 &rhs) const {
+    bool operator>(const uint128 &rhs) const {
         return (first > rhs.first);
     }
-    __host__ __device__ bool operator>=(const uint128 &rhs) const {
+    bool operator>=(const uint128 &rhs) const {
         return (first >= rhs.first);
     }
-    __host__ __device__ bool operator==(const uint128 &rhs) const {
+    bool operator==(const uint128 &rhs) const {
         return (first == rhs.first);
     }
-    __host__ __device__ bool operator!=(const uint128 &rhs) const {
+    bool operator!=(const uint128 &rhs) const {
         return (first != rhs.first || second != rhs.second ||
                 third != rhs.third)|| fourth != rhs.fourth;
     }
@@ -59,7 +59,7 @@ inline std::ostream& operator << (std::ostream& o, const uint128& a)
     return o;
 }
 
-inline __host__ __device__ void bin(uint64 n)
+inline void bin(uint64 n)
 {
     if (n > 1)
     bin(n>>1);

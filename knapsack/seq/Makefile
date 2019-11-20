@@ -1,9 +1,10 @@
-NVCC=nvcc
-NVCCFLAG= -g -G -arch=sm_61 -O3 -std=c++11
- 
-all: knapsack_seq
-knapsack_seq: knapsack_seq.cu
-	${NVCC} ${NVCCFLAG} knapsack_seq.cu -o $@
+all: knapsack_seq knapsack_seq_test
+knapsack_seq: knapsack_seq.cpp
+	g++ -std=c++11 -O3 knapsack_seq.cpp -o $@
+
+knapsack_seq_test: knapsack_seq_test.cpp
+	g++ -std=c++11 -O3 knapsack_seq_test.cpp -o $@
+
 
 clean:
-	rm -rf knapsack_seq
+	rm -rf knapsack_seq knapsack_seq_test

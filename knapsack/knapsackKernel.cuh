@@ -41,14 +41,14 @@ __device__ void appKernel(int *weight, int *benefit, float *benefitPerWeight,
         KnapsackItem item = delItem[i];
         int oldBenefit = -item.first;
         int oldWeight = item.second;
-        short oldIndex = item.third;
-//        short oldBound = -item.fourth;
+        int oldIndex = item.third;
+        int oldBound = -item.fourth;
 
-        int _bound = ComputeBound(oldBenefit, oldWeight, oldIndex, inputSize, capacity, weight, benefit);
-        if (oldBenefit + _bound < *max_benefit) continue;
-//        if (oldBound < *max_benefit) continue;
+//        int _bound = ComputeBound(oldBenefit, oldWeight, oldIndex, inputSize, capacity, weight, benefit);
+//        if (oldBenefit + _bound < *max_benefit) continue;
+        if (oldBound < *max_benefit) continue;
 
-        short index = oldIndex + 1;
+        int index = oldIndex + 1;
 
         if (index == inputSize) continue;
 
@@ -70,7 +70,7 @@ __device__ void appKernel(int *weight, int *benefit, float *benefitPerWeight,
             insItem[insIndex].second = newWeight;
             insItem[insIndex].third = index;
 //            insItem[insIndex].fourth = ((oldSeq << 1) + 1);
-//            insItem[insIndex].fourth = -(newBenefit + newBound);
+            insItem[insIndex].fourth = -(newBenefit + newBound);
         }
         int newBound1 = ComputeBound(oldBenefit, oldWeight, index, inputSize, capacity, weight, benefit);
         // newBound = bound[index + 1];
@@ -85,7 +85,7 @@ __device__ void appKernel(int *weight, int *benefit, float *benefitPerWeight,
             insItem[insIndex].second = oldWeight;
             insItem[insIndex].third = index;
 //            insItem[insIndex].fourth = oldSeq << 1;
-//            insItem[insIndex].fourth = -(oldBenefit + newBound1);
+            insItem[insIndex].fourth = -(oldBenefit + newBound1);
         }
     }
 }

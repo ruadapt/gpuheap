@@ -14,8 +14,9 @@ for ((i=1;i<=10;i++)); do
     #timeout 3m ./../seq/knapsack_seq $FILE 1 1 >> ${OUTPUT}
     #timeout 30m ./../knapsack_debug $FILE 1024000 256 16 256 150 0 0 0 0 >> ${OUTPUT}
     #timeout 30m ./../knapsack_debug $FILE 1024000 256 16 256 150 1 0 0 0 >> ${OUTPUT}
-    timeout 3m ./../knapsack $FILE 102400 256 16 256 152 2 1 0 0
+    timeout 1m ./../knapsack $FILE 102400 256 16 256 152 2 1 0 0
     #timeout 30m ./../knapsack $FILE 1024000 256 16 256 150 1 0 0 0 >> ${OUTPUT}
+    printf "\n"
 done
 
 

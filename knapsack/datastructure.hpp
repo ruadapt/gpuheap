@@ -12,10 +12,10 @@ typedef unsigned long long uint64;
 struct KnapsackItem {
     int first; // benefit
     int second; // weight
-    short third;
-    short fourth;
+    int third;
+    int fourth;
 
-    __host__ __device__ KnapsackItem(int a = 0, int b = 0, short c = 0, short d = 0)
+    __host__ __device__ KnapsackItem(int a = 0, int b = 0, int c = 0, int d = 0)
         : first(a), second(b), third(c), fourth(d) {
     }
 
@@ -28,46 +28,46 @@ struct KnapsackItem {
     }
 
     // rewrite this if you need more accurate comparison
-    __host__ __device__ bool operator<(const KnapsackItem &rhs) const {
-        return (first < rhs.first);
-    }
-    __host__ __device__ bool operator<=(const KnapsackItem &rhs) const {
-        return (first <= rhs.first);
-    }
-    __host__ __device__ bool operator>(const KnapsackItem &rhs) const {
-        return (first > rhs.first);
-    }
-    __host__ __device__ bool operator>=(const KnapsackItem &rhs) const {
-        return (first >= rhs.first);
-    }
-    __host__ __device__ bool operator==(const KnapsackItem &rhs) const {
-        return (first == rhs.first);
-    }
-    __host__ __device__ bool operator!=(const KnapsackItem &rhs) const {
-        return (first != rhs.first || second != rhs.second ||
-                third != rhs.third)|| fourth != rhs.fourth;
-    }
-
-    // rewrite this if you need more accurate comparison
     //__host__ __device__ bool operator<(const KnapsackItem &rhs) const {
-        //return (fourth < rhs.fourth);
+        //return (first < rhs.first);
     //}
     //__host__ __device__ bool operator<=(const KnapsackItem &rhs) const {
-        //return (fourth <= rhs.fourth);
+        //return (first <= rhs.first);
     //}
     //__host__ __device__ bool operator>(const KnapsackItem &rhs) const {
-        //return (fourth > rhs.fourth);
+        //return (first > rhs.first);
     //}
     //__host__ __device__ bool operator>=(const KnapsackItem &rhs) const {
-        //return (fourth >= rhs.fourth);
+        //return (first >= rhs.first);
     //}
     //__host__ __device__ bool operator==(const KnapsackItem &rhs) const {
-        //return (fourth == rhs.fourth);
+        //return (first == rhs.first);
     //}
     //__host__ __device__ bool operator!=(const KnapsackItem &rhs) const {
         //return (first != rhs.first || second != rhs.second ||
                 //third != rhs.third)|| fourth != rhs.fourth;
     //}
+
+    // rewrite this if you need more accurate comparison
+    __host__ __device__ bool operator<(const KnapsackItem &rhs) const {
+        return (fourth < rhs.fourth);
+    }
+    __host__ __device__ bool operator<=(const KnapsackItem &rhs) const {
+        return (fourth <= rhs.fourth);
+    }
+    __host__ __device__ bool operator>(const KnapsackItem &rhs) const {
+        return (fourth > rhs.fourth);
+    }
+    __host__ __device__ bool operator>=(const KnapsackItem &rhs) const {
+        return (fourth >= rhs.fourth);
+    }
+    __host__ __device__ bool operator==(const KnapsackItem &rhs) const {
+        return (fourth == rhs.fourth);
+    }
+    __host__ __device__ bool operator!=(const KnapsackItem &rhs) const {
+        return (first != rhs.first || second != rhs.second ||
+                third != rhs.third)|| fourth != rhs.fourth;
+    }
 
 
 };
