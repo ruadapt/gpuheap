@@ -220,7 +220,7 @@ void oneheapearlystop(int *weight, int *benefit, float *benefitPerWeight,
         if (tmpBenefit == global_max_benefit) break;
         cudaMemcpy(activeCount, &tmpItemCountAfter, sizeof(int), cudaMemcpyHostToDevice);
 
-        if (tmpItemCountAfter > tmpItemCountBefore / 2) gc_threshold += 100;
+//        if (tmpItemCountAfter > tmpItemCountBefore / 2) gc_threshold += 100;
     }
 
 #ifdef PERF_DEBUG
