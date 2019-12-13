@@ -11,6 +11,7 @@
 
 using namespace std;
 
+template <class T>
 struct TB {
 	/* Number of available entries */
 	int tableSize;
@@ -35,8 +36,7 @@ struct TB {
 	/* Target batch node */
 	int *target;
 	
-	int *bufferKeys;
-	int *bufferVals;
+	T *bufferKeys;
 	
 	TB (int _tableSize, int _batchSize, int _type)
 	{
@@ -50,20 +50,18 @@ struct TB {
     void printTB() {
 		int *h_node = new int[tableSize];
 		int *h_target = new int[tableSize];
-		int *h_bufferKeys = new int[tableSize * batchSize];
-		int *h_bufferVals = new int[tableSize * batchSize];
+		T *h_bufferKeys = new T[tableSize * batchSize];
 		
 		cudaMemcpy(h_node, node, sizeof(int) * tableSize, cudaMemcpyDeviceToHost);
 		if (type == 0) {
 			cudaMemcpy(h_target, target, sizeof(int) * tableSize, cudaMemcpyDeviceToHost);
-			cudaMemcpy(h_bufferKeys, bufferKeys, sizeof(int) * tableSize * batchSize, cudaMemcpyDeviceToHost);
-			cudaMemcpy(h_bufferVals, bufferVals, sizeof(int) * tableSize * batchSize, cudaMemcpyDeviceToHost);
+			cudaMemcpy(h_bufferKeys, bufferKeys, sizeof(T) * tableSize * batchSize, cudaMemcpyDeviceToHost);
 
 			cout << "insert table buffer:\n";
 			for (int i = startIdx; i != endIdx; ++i) {
 				cout << "entry " << i << " node: " << h_node[i] << " target: " << h_target[i] << endl;
 				for (int j = 0; j < batchSize; ++j) {
-					cout << h_bufferKeys[i * batchSize + j] << " " << h_bufferVals[i * batchSize + j];
+					cout << h_bufferKeys[i * batchSize + j];
 					cout << " | ";
 				}
 				cout << endl;
@@ -101,8 +99,7 @@ struct TB {
 		*/
 		if (type == 0) {
 			cudaMalloc((void **)&target, sizeof(int) * tableSize);
-			cudaMalloc((void **)&bufferKeys, sizeof(int) * tableSize * batchSize);
-			cudaMalloc((void **)&bufferVals, sizeof(int) * tableSize * batchSize);
+			cudaMalloc((void **)&bufferKeys, sizeof(T) * tableSize * batchSize);
 			// target = (int *)malloc(sizeof(int) * tableSize);
 			// bufferKeys = (int *)malloc(sizeof(int) * tableSize * batchSize);
 			// bufferVals = (int *)malloc(sizeof(int) * tableSize * batchSize);
@@ -111,7 +108,7 @@ struct TB {
 
 };
 
-template <typename K, typename V>
+template <typename T>
 class Heap {
 public:
 
@@ -125,60 +122,111 @@ public:
 	/* The number of entries in table buffer */
     int tableSize;
 	
-    K *heapKeys;
-    V *heapVals;
+    T *heapKeys;
 	/* 
 		Instead of using the queue in controller (on CPU),
 		store every batch's status(USED/UNUSED/LASTONE).
 	*/
 	int *status;
 
+    int *globalBenefit;
+
     Heap (int _batchNum, int _batchSize, int _tableSize) :
 		batchNum(_batchNum), batchSize(_batchSize), 
 		batchCount(0), tableSize(_tableSize)
     {
 		// prepare device heap
-		cudaMalloc((void **)&heapKeys, sizeof(K) * batchSize * batchNum);
-		cudaMalloc((void **)&heapVals, sizeof(V) * batchSize * batchNum);
+		cudaMalloc((void **)&heapKeys, sizeof(T) * batchSize * batchNum);
+        T *h_keys = new T[batchSize * batchNum]();
+        cudaMemcpy(heapKeys, h_keys, batchSize * batchNum * sizeof(T), cudaMemcpyHostToDevice);
+        delete []h_keys;
+
 		cudaMalloc((void **)&status, sizeof(int) * batchNum);
+        int *h_status = new int[batchNum];
+        for (int i = 0; i < batchNum; ++i) h_status[i] = UNUSED;
+        cudaMemcpy(status, h_status, batchNum * sizeof(int), cudaMemcpyHostToDevice);
+        delete []h_status;
+
+        cudaMalloc((void **)&globalBenefit, sizeof(int));
+        cudaMemset(globalBenefit, 0, sizeof(int));
+    }
+
+    void reset() {
+		cudaMalloc((void **)&heapKeys, sizeof(T) * batchSize * batchNum);
+        T *h_keys = new T[batchSize * batchNum]();
+        cudaMemcpy(heapKeys, h_keys, batchSize * batchNum * sizeof(T), cudaMemcpyHostToDevice);
+        delete []h_keys;
+		cudaMalloc((void **)&status, sizeof(int) * batchNum);
+        int *h_status = new int[batchNum];
+        for (int i = 0; i < batchNum; ++i) h_status[i] = UNUSED;
+        cudaMemcpy(status, h_status, batchNum * sizeof(int), cudaMemcpyHostToDevice);
+        delete []h_status;
+        batchCount = 0;
     }
 
     ~Heap() 
 	{
         cudaFree(heapKeys);
         heapKeys = NULL;
-        cudaFree(heapVals);
-        heapVals = NULL;
 		cudaFree(status);
 		status = NULL;
+        cudaFree(globalBenefit);
+        globalBenefit = NULL;
     }
 
 	int maxIdx(int oriIdx) {
-        int i = 1;
-        while (i < oriIdx) {
-            i <<= 1;
-        }
-        return i;
+        return oriIdx;
+        /*int i = 1;*/
+        /*while (i < oriIdx) {*/
+            /*i <<= 1;*/
+        /*}*/
+        /*return i;*/
     }
 	
+    int GetBatchCount() {
+        return batchCount;
+    }
+
+    void checkHeap() {
+				
+        T *h_key = new T[batchSize * (maxIdx(batchCount) + 1)];
+        int *h_status = new int[maxIdx(batchCount) + 1];
+        int h_batchCount = batchCount;
+		
+        cudaMemcpy(h_key, heapKeys, sizeof(T) * batchSize * (maxIdx(h_batchCount) + 1), cudaMemcpyDeviceToHost);
+        cudaMemcpy(h_status, status, sizeof(int) * (maxIdx(batchCount) + 1), cudaMemcpyDeviceToHost);
+
+        for (int i = 0; i < maxIdx(h_batchCount) + 1; ++i) {
+            if (i != 0  && h_key[i * batchSize] < h_key[i / 2 * batchSize]) {
+                cout << "Error1" << endl;
+                return;
+            }
+            for (int j = 1; j < batchSize; ++j) {
+                if (h_key[i * batchSize + j] < h_key[i * batchSize + j - 1]) {
+                    cout << "Error2" << endl;
+                    return;
+                }
+            }
+        }
+
+    }
+
     void printHeap() {
 		
 //		delTableBuffer->printTB();
 //		insTableBuffer->printTB();
 		
-        K *h_key = new K[batchSize * (maxIdx(batchCount) + 1)];
-        V *h_value = new V[batchSize * (maxIdx(batchCount) + 1)];
+        T *h_key = new T[batchSize * (maxIdx(batchCount) + 1)];
         int *h_status = new int[maxIdx(batchCount) + 1];
         int h_batchCount = batchCount;
 		
-        cudaMemcpy(h_key, heapKeys, sizeof(K) * batchSize * (maxIdx(h_batchCount) + 1), cudaMemcpyDeviceToHost);
-        cudaMemcpy(h_value, heapVals, sizeof(V) * batchSize * (maxIdx(h_batchCount) + 1), cudaMemcpyDeviceToHost);
+        cudaMemcpy(h_key, heapKeys, sizeof(T) * batchSize * (maxIdx(h_batchCount) + 1), cudaMemcpyDeviceToHost);
         cudaMemcpy(h_status, status, sizeof(int) * (maxIdx(batchCount) + 1), cudaMemcpyDeviceToHost);
 
         for (int i = 0; i < maxIdx(h_batchCount) + 1; ++i) {
             cout << "batch " << i << "_" << h_status[i] << ": ";
             for (int j = 0; j < batchSize; ++j) {
-                cout << h_key[i * batchSize + j] << " " << h_value[i * batchSize + j];
+                cout << h_key[i * batchSize + j];
                 cout << " | ";
             }
             cout << endl;
@@ -190,8 +238,9 @@ public:
 
 
 __device__ int getReversedIdx(int oriIdx) {
-	int l = __clz(oriIdx + 1) + 1;
-	return ((__brev(oriIdx + 1) >> l) | (1 << (32-l))) - 1;
+    return oriIdx;
+	/*int l = __clz(oriIdx + 1) + 1;*/
+	/*return ((__brev(oriIdx + 1) >> l) | (1 << (32-l))) - 1;*/
 }
 
 __device__ int getNextIdxToTarget(int currentIdx, int targetIdx)
@@ -199,46 +248,39 @@ __device__ int getNextIdxToTarget(int currentIdx, int targetIdx)
 	return ((targetIdx + 1) >> (__clz(currentIdx + 1) - __clz(targetIdx + 1) - 1)) - 1;
 }
 
-template <typename K, typename V>
-__global__ void insertItems(Heap<K, V> *heap, 
-							K *insertKeys, V *insertVals,
-							TB *insTableBuffer)
+template <typename T>
+__global__ void insertItems(Heap<T> *heap, 
+							T *insertKeys,
+							TB<T> *insTableBuffer)
 {		
 	int batchSize = heap->batchSize;
 	extern __shared__ int s[];
-	K *sKeys = (K *)&s[0];
-	V *sVals = (V *)&sKeys[2 * batchSize];
+	T *sKeys = (T *)&s[0];
 	
 	/* Load data from insert batch to shared memory */
 	for (int j = threadIdx.x; j < batchSize; j += blockDim.x) {
 		sKeys[batchSize + j] = insertKeys[j];
-		sVals[batchSize + j] = insertVals[j];
 	}
 	__syncthreads();
 		
-	
 	if (heap->batchCount != 0) {
 		/* Load data from root batch to shared memory */
 		for (int j = threadIdx.x; j < batchSize; j += blockDim.x) {
 			sKeys[j] = heap->heapKeys[j];
-			sVals[j] = heap->heapVals[j];
 		}
 		ibitonicSort(sKeys, 
-                     sVals,
                      2 * batchSize);
 		__syncthreads();
 		
 		/* restore data from shared memory to root batch */
 		for (int j = threadIdx.x; j < batchSize; j += blockDim.x) {
 			heap->heapKeys[j] = sKeys[j];
-			heap->heapVals[j] = sVals[j];
 		}
 
         /* Initialized an insert entry */
         int index = insTableBuffer->endIdx;
         for (int j = threadIdx.x; j < batchSize; j += blockDim.x) {
             insTableBuffer->bufferKeys[index * batchSize + j] = sKeys[batchSize + j];
-            insTableBuffer->bufferVals[index * batchSize + j] = sVals[batchSize + j];
         }
         __syncthreads();
         
@@ -252,14 +294,12 @@ __global__ void insertItems(Heap<K, V> *heap,
 	}
 	else {
         ibitonicSort(sKeys + batchSize,
-                     sVals + batchSize,
                      batchSize);
 		__syncthreads();
 
 		/* restore data from shared memory to root batch */
 		for (int j = threadIdx.x; j < batchSize; j += blockDim.x) {
 			heap->heapKeys[j] = sKeys[batchSize + j];
-			heap->heapVals[j] = sVals[batchSize + j];
 		}
         __syncthreads();
 
@@ -271,18 +311,17 @@ __global__ void insertItems(Heap<K, V> *heap,
 	
 }
 
-template <typename K, typename V>
-__global__ void deleteItems(Heap<K, V> *heap, 
-							K *deleteKeys, V *deleteVals, 
-							TB *insTableBuffer,
-							TB *delTableBuffer)
+template <typename T>
+__global__ void deleteItems(Heap<T> *heap, 
+							T *deleteKeys,
+							TB<T> *insTableBuffer,
+							TB<T> *delTableBuffer)
 {		
 	int batchSize = heap->batchSize;
 
 	/* Load data from root batch to delete batch */
 	for (int j = threadIdx.x; j < batchSize; j += blockDim.x) {
 		deleteKeys[j] = heap->heapKeys[j];
-		deleteVals[j] = heap->heapVals[j];
 	}
 	__syncthreads();
 	
@@ -291,7 +330,6 @@ __global__ void deleteItems(Heap<K, V> *heap,
 		int index = insTableBuffer->endIdx - 1;
 		for (int j = threadIdx.x; j < batchSize; j += blockDim.x) {
 			heap->heapKeys[j] = insTableBuffer->bufferKeys[index * batchSize + j];
-			heap->heapVals[j] = insTableBuffer->bufferVals[index * batchSize + j];
 		}
 		__syncthreads();
 		/* Update insert table buffer */
@@ -307,7 +345,6 @@ __global__ void deleteItems(Heap<K, V> *heap,
 		int index = getReversedIdx(heap->batchCount - 1);
 		for (int j = threadIdx.x; j < batchSize; j += blockDim.x) {
 			heap->heapKeys[j] = heap->heapKeys[index * batchSize + j];
-			heap->heapVals[j] = heap->heapVals[index * batchSize + j];
 		}
 		__syncthreads();
 		/* Update heap status */
@@ -329,10 +366,10 @@ __global__ void deleteItems(Heap<K, V> *heap,
 
 // return if the table buffer is empty or not
 // FIXME should be separate
-template <typename K, typename V>
-__global__ void updateTableBuffer(Heap<K, V> *heap,
-								  TB *insTableBuffer,
-								  TB *delTableBuffer,
+template <typename T>
+__global__ void updateTableBuffer(Heap<T> *heap,
+								  TB<T> *insTableBuffer,
+								  TB<T> *delTableBuffer,
                                   bool *status)
 {
 	if (!threadIdx.x && !blockIdx.x) {
@@ -356,9 +393,9 @@ __global__ void updateTableBuffer(Heap<K, V> *heap,
     }
 }
 
-template <typename K, typename V>
-__global__ void insertUpdate(Heap<K, V> *heap,
-							 TB *insTableBuffer)
+template <typename T>
+__global__ void insertUpdate(Heap<T> *heap,
+							 TB<T> *insTableBuffer)
 {
 	int blockNum = gridDim.x;
 	int blockSize = blockDim.x;
@@ -369,8 +406,7 @@ __global__ void insertUpdate(Heap<K, V> *heap,
 	int batchSize = heap->batchSize;
 	
 	extern __shared__ int s[];
-	K *sKeys = (K *)&s[0];
-	V *sVals = (V *)&sKeys[2 * batchSize];
+	T *sKeys = (T *)&s[0];
 
 	for (int i = blockIdx.x; i < entryNum; i += blockNum) {
 		int tableIdx = entryStartIdx + i;
@@ -381,7 +417,6 @@ __global__ void insertUpdate(Heap<K, V> *heap,
 			/* Restore data back to target batch */
 			for (int j = threadIdx.x; j < batchSize; j += blockSize) {
 				heap->heapKeys[targetIdx * batchSize + j] = insTableBuffer->bufferKeys[tableIdx * batchSize + j];
-				heap->heapVals[targetIdx * batchSize + j] = insTableBuffer->bufferVals[tableIdx * batchSize + j];
 			}
 			__syncthreads();
 			
@@ -397,22 +432,19 @@ __global__ void insertUpdate(Heap<K, V> *heap,
 		/* Load data from current batch to shared memory */
 		for (int j = threadIdx.x; j < batchSize; j += blockSize) {
 			sKeys[j] = heap->heapKeys[currentIdx * batchSize + j];
-			sVals[j] = heap->heapVals[currentIdx * batchSize + j];
 		}
 		
 		/* Load data from buffer to shared memory */
 		for (int j = threadIdx.x; j < batchSize; j += blockSize) {
 			sKeys[batchSize + j] = insTableBuffer->bufferKeys[tableIdx * batchSize + j];
-			sVals[batchSize + j] = insTableBuffer->bufferVals[tableIdx * batchSize + j];
 		}
 		
 		__syncthreads();
 		
-        imergePath(sKeys, sVals,
-                   sKeys + batchSize, sVals + batchSize,
+        imergePath(sKeys,
+                   sKeys + batchSize,
                    &heap->heapKeys[currentIdx * batchSize], 
-                   &heap->heapVals[currentIdx * batchSize],
-                   sKeys + batchSize, sVals + batchSize,
+                   sKeys + batchSize, 
                    batchSize, 4 * batchSize);
 		__syncthreads();
 				
@@ -425,7 +457,6 @@ __global__ void insertUpdate(Heap<K, V> *heap,
 			/* Restore data to target node */
 			for (int j = threadIdx.x; j < batchSize; j += blockSize) {
 				heap->heapKeys[targetIdx * batchSize + j] = sKeys[batchSize + j];
-				heap->heapVals[targetIdx * batchSize + j] = sVals[batchSize + j];
 			}
 			
 			if (!threadIdx.x) {
@@ -439,7 +470,6 @@ __global__ void insertUpdate(Heap<K, V> *heap,
 			// update the entry in the insTableBuffer			
 			for (int j = threadIdx.x; j < batchSize; j += blockDim.x) {
 				insTableBuffer->bufferKeys[tableIdx * batchSize + j] = sKeys[batchSize + j];
-				insTableBuffer->bufferVals[tableIdx * batchSize + j] = sVals[batchSize + j];
 			}
 			__syncthreads();
 			
@@ -452,9 +482,9 @@ __global__ void insertUpdate(Heap<K, V> *heap,
 	}
 }
 
-template <typename K, typename V>
-__global__ void deleteUpdate(Heap<K, V> *heap,
-							 TB *delTableBuffer) 
+template <typename T>
+__global__ void deleteUpdate(Heap<T> *heap,
+							 TB<T> *delTableBuffer) 
 {
 	int blockNum = gridDim.x;
 	int blockSize = blockDim.x;
@@ -465,8 +495,7 @@ __global__ void deleteUpdate(Heap<K, V> *heap,
 	int batchSize = heap->batchSize;
 	
 	extern __shared__ int s[];
-	K *sKeys = (K *)&s[0];
-	V *sVals = (V *)&sKeys[3 * batchSize];
+	T *sKeys = (T *)&s[0];
 
 	/* each thread block is assigned an entry in delTableBuffer */
 	for (int i = blockIdx.x; i < entryNum; i += blockNum) {
@@ -484,12 +513,10 @@ __global__ void deleteUpdate(Heap<K, V> *heap,
 			/* Load data from parent batch to shared memory */
 			for (int j = threadIdx.x; j < batchSize; j += blockSize) {
 				sKeys[j] = heap->heapKeys[parentIdx * batchSize + j];
-				sVals[j] = heap->heapVals[parentIdx * batchSize + j];
 			}
 			/* Load data from left child batch to shared memory */
 			for (int j = threadIdx.x; j < batchSize; j += blockSize) {
 				sKeys[batchSize + j] = heap->heapKeys[lchildIdx * batchSize + j];
-				sVals[batchSize + j] = heap->heapVals[lchildIdx * batchSize + j];
 			}
 			__syncthreads();
 			/* We need to check if there is a used right child batch */
@@ -498,12 +525,10 @@ __global__ void deleteUpdate(Heap<K, V> *heap,
 				Right child batch does not exist, so doing sorting, then
 				store data back to heap and exit this update
 				*/
-                imergePath(sKeys, sVals,
-                           sKeys + batchSize, sVals + batchSize,
+                imergePath(sKeys,
+                           sKeys + batchSize,
                            &heap->heapKeys[parentIdx * batchSize],
-                           &heap->heapVals[parentIdx * batchSize],
                            &heap->heapKeys[lchildIdx * batchSize],
-                           &heap->heapVals[lchildIdx * batchSize],
                            batchSize, 6 * batchSize);
                 __syncthreads();
 			}
@@ -513,7 +538,6 @@ __global__ void deleteUpdate(Heap<K, V> *heap,
 				/* Load data from right child batch to shared memory */
 				for (int j = threadIdx.x; j < batchSize; j += blockDim.x) {
 					sKeys[2 * batchSize + j] = heap->heapKeys[rchildIdx * batchSize + j];
-					sVals[2 * batchSize + j] = heap->heapVals[rchildIdx * batchSize + j];
 				}
 				__syncthreads();
 				
@@ -527,20 +551,17 @@ __global__ void deleteUpdate(Heap<K, V> *heap,
 								rchildIdx : lchildIdx;
 				__syncthreads();
 
-                imergePath(sKeys + batchSize, sVals + batchSize,
-                           sKeys + 2 * batchSize, sVals + 2 * batchSize,
-                           sKeys + batchSize, sVals + batchSize,
+                imergePath(sKeys + batchSize,
+                           sKeys + 2 * batchSize,
+                           sKeys + batchSize,
                            &heap->heapKeys[largeIdx * batchSize],
-                           &heap->heapVals[largeIdx * batchSize],
                            batchSize, 6 * batchSize);
                 __syncthreads();
 
-                imergePath(sKeys, sVals,
-                           sKeys + batchSize, sVals + batchSize,
+                imergePath(sKeys,
+                           sKeys + batchSize,
                            &heap->heapKeys[parentIdx * batchSize],
-                           &heap->heapVals[parentIdx * batchSize],
                            &heap->heapKeys[smallIdx * batchSize],
-                           &heap->heapVals[smallIdx * batchSize],
                            batchSize, 6 * batchSize);
                 __syncthreads();
 			

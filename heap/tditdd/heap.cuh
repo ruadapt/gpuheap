@@ -557,6 +557,7 @@ class Heap {
 
             if (threadIdx.x == 0) {
                 changeStatus(&status[0], AVAIL, INUSE);
+//                printf("%d %d\n", *globalBenefit, *batchCount);
             }
             __syncthreads();
 

@@ -1,4 +1,4 @@
-NVCCFLAG= -g -G -arch=sm_61 -O0 -std=c++11
+NVCCFLAG= -g -G -arch=sm_61 -O0 -std=c++11 #--ptxas-options=-v
 NVCC=nvcc ${NVCCFLAG}
 
 all: astar generate_astar_map

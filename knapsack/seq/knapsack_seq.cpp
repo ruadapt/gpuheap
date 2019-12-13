@@ -555,7 +555,7 @@ int main(int argc, char *argv[])
     setTime(&startTime);
     knapsack_PQ_1(capacity, w_p, number, res);
     setTime(&endTime);
-    /*cout << res << " ";*/
+    cout << res << " ";
 
     cout << getTime(&startTime, &endTime) << " ";
 //    cout << getTime(&startTime, &endTime) << " " << explored << " ";

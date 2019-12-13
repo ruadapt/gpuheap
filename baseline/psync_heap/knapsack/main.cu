@@ -4,9 +4,6 @@
 #include <algorithm>
 
 #include "models.cuh"
-#include "models_pq_fifo.cuh"
-#include "models_pq.cuh"
-#include "models_fifo.cuh"
 #include "util.cuh"
 #include "datastructure.hpp"
 
@@ -59,8 +56,9 @@ int main(int argc, char *argv[])
         inputFile.open(strcat(argv[1], ".res"));
         inputFile >> max_benefit;
         inputFile.close();
-        cout << max_benefit << " ";
+        cout << "max_benefit:" << max_benefit << endl;
     }
+
 	// Sort items by ppw
 	KnapsackItem *items = new KnapsackItem[inputSize];
 	for (int i = 0; i < inputSize; i++){
@@ -88,38 +86,15 @@ int main(int argc, char *argv[])
     cudaMalloc((void **)&d_max_benefit, sizeof(int));
     cudaMemset(d_max_benefit, 0, sizeof(int));
 
-    if (model == 0) /* heap */ {
-        oneheap(d_weight, d_benefit, d_benefitPerWeight,
-                d_max_benefit, capacity, inputSize,
-                batchNum, batchSize, blockNum, blockSize,
-                gc_threshold);
-    } else if (model == 1) /* fifo queue */ {
-        onebuffer(d_weight, d_benefit, d_benefitPerWeight,
-                d_max_benefit, capacity, inputSize,
-                batchNum, batchSize, blockNum, blockSize,
-                gc_threshold);
-    } else if (model == 2) /* heap + fifo queue */ {
-        if (has_maxbenefit == 0) {
-            oneheap(d_weight, d_benefit, d_benefitPerWeight,
-                    d_max_benefit, capacity, inputSize,
-                    batchNum, batchSize, blockNum, blockSize,
-                    gc_threshold);
-            cudaMemcpy(&max_benefit, d_max_benefit, sizeof(int), cudaMemcpyDeviceToHost);
-            cudaMemset(d_max_benefit, 0, sizeof(int));
-        }
+    oneheapfifoswitch(d_weight, d_benefit, d_benefitPerWeight,
+            d_max_benefit, capacity, inputSize,
+            batchNum, batchSize, blockNum, blockSize,
+            gc_threshold, switch_counter, max_benefit);
 
-        oneheapearlystop(d_weight, d_benefit, d_benefitPerWeight,
-                d_max_benefit, capacity, inputSize,
-                batchNum, batchSize, blockNum, blockSize,
-                gc_threshold, max_benefit);
-    } else if (model == 3) /* heap + fifo switch */ {
-        oneheapfifoswitch(d_weight, d_benefit, d_benefitPerWeight,
-                d_max_benefit, capacity, inputSize,
-                batchNum, batchSize, blockNum, blockSize,
-                gc_threshold, switch_counter, max_benefit);
-    }
     cudaMemcpy(&max_benefit, d_max_benefit, sizeof(int), cudaMemcpyDeviceToHost);
+#ifdef PERF_DEBUG
     cout << max_benefit << " ";
+#endif
     delete[] weight; weight = NULL;
     delete[] benefit; benefit = NULL;
     delete[] benefitPerWeight; benefitPerWeight = NULL;

@@ -1,12 +1,12 @@
-#ifndef BUFFER_CUH
-#define BUFFER_CUH
+#ifndef TBUFFER_CUH
+#define TBUFFER_CUH
 
 #include "datastructure.h"
 
+template<typename K>
 struct TB {
     /* Number of available entries */
     uint tableSize;
-:xa
 
     /* Index of where next update should starts at */
     uint startIdx;
@@ -27,8 +27,7 @@ struct TB {
     /* Target batch node */
     int *target;
 
-    int *bufferKeys;
-    int *bufferVals;
+    K *bufferKeys;
 
     TB (int _tableSize, int _batchSize, int _type)
     {
@@ -43,19 +42,17 @@ struct TB {
         int *h_node = new int[tableSize];
         int *h_target = new int[tableSize];
         int *h_bufferKeys = new int[tableSize * batchSize];
-        int *h_bufferVals = new int[tableSize * batchSize];
         
         cudaMemcpy(h_node, node, sizeof(int) * tableSize, cudaMemcpyDeviceToHost);
         if (type == 0) {
             cudaMemcpy(h_target, target, sizeof(int) * tableSize, cudaMemcpyDeviceToHost);
             cudaMemcpy(h_bufferKeys, bufferKeys, sizeof(int) * tableSize * batchSize, cudaMemcpyDeviceToHost);
-            cudaMemcpy(h_bufferVals, bufferVals, sizeof(int) * tableSize * batchSize, cudaMemcpyDeviceToHost);
 
             cout << "insert table buffer:\n";
             for (int i = startIdx; i != endIdx; ++i) {
                 cout << "entry " << i << " node: " << h_node[i] << " target: " << h_target[i] << endl;
                 for (int j = 0; j < batchSize; ++j) {
-                    cout << h_bufferKeys[i * batchSize + j] << " " << h_bufferVals[i * batchSize + j];
+                    cout << h_bufferKeys[i * batchSize + j];
                     cout << " | ";
                 }
                 cout << endl;
@@ -93,8 +90,7 @@ struct TB {
         */
         if (type == 0) {
             cudaMalloc((void **)&target, sizeof(int) * tableSize);
-            cudaMalloc((void **)&bufferKeys, sizeof(int) * tableSize * batchSize);
-            cudaMalloc((void **)&bufferVals, sizeof(int) * tableSize * batchSize);
+            cudaMalloc((void **)&bufferKeys, sizeof(K) * tableSize * batchSize);
             // target = (int *)malloc(sizeof(int) * tableSize);
             // bufferKeys = (int *)malloc(sizeof(int) * tableSize * batchSize);
             // bufferVals = (int *)malloc(sizeof(int) * tableSize * batchSize);

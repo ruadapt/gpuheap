@@ -13,11 +13,19 @@
 
 using namespace std;
 
+__device__ int explored_flag;
+
+__global__ void DEBUG_INIT() {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        explored_flag = 0;
+    }
+}
+
 __global__ void oneBufferApplicationMixed(Buffer<KnapsackItem> *buffer, int batchSize, 
                             int *weight, int *benefit, float *benefitPerWeight,
                             int capacity, int inputSize,
                             int *globalBenefit, int *activeCount,
-                            int *gc_flag, int gc_threshold,
+                            int *gc_flag, int gc_threshold, int switch_counter, int global_max_benefit,
                             int *explored_nodes,
                             bool init_flag = true)
 {
@@ -32,6 +40,7 @@ __global__ void oneBufferApplicationMixed(Buffer<KnapsackItem> *buffer, int batc
 
     bool init = init_flag;
 	int previousBenefit = *globalBenefit;
+    int counter = 0;
 
     if (threadIdx.x == 0) {
         *delSize = 0;
@@ -97,13 +106,17 @@ __global__ void oneBufferApplicationMixed(Buffer<KnapsackItem> *buffer, int batc
             if (atomicAdd(activeCount, 0) == 0) {
                 *delSize = -1;
             }
+            if (*globalBenefit == global_max_benefit && atomicCAS(&explored_flag, 0, 1) == 0) {
+                printf("%d ", *explored_nodes);
+            }
 			if (*insSize > 0 && previousBenefit < *globalBenefit) {
-				*gc_flag = 2;
-			}
+                counter++;
+                if (counter == switch_counter)
+    				*gc_flag = 2;
+            } else {
+                counter = 0;
+            }
 			previousBenefit = *globalBenefit;
-#ifdef PERF_DEBUG 
-            atomicAdd(explored_nodes, *insSize);
-#endif
         }
         __syncthreads();
         if (*delSize == -1 || *gc_flag != 0) break;
@@ -115,7 +128,7 @@ __global__ void oneHeapApplicationMixed(Heap<KnapsackItem> *heap, int batchSize,
                             int *weight, int *benefit, float *benefitPerWeight,
                             int capacity, int inputSize,
                             int *globalBenefit, int *activeCount,
-                            int *gc_flag, int gc_threshold,
+                            int *gc_flag, int gc_threshold, int switch_counter, int global_max_benefit,
                             int *explored_nodes,
                             bool init_flag = true)
 {
@@ -130,6 +143,7 @@ __global__ void oneHeapApplicationMixed(Heap<KnapsackItem> *heap, int batchSize,
 
     bool init = init_flag;
 	int previousBenefit = *globalBenefit;
+    int counter = 0;
 	
     if (threadIdx.x == 0) {
         heap->tbstate[blockIdx.x] = 1;
@@ -198,18 +212,22 @@ __global__ void oneHeapApplicationMixed(Heap<KnapsackItem> *heap, int batchSize,
         }
         __syncthreads();
         if (threadIdx.x == 0) {
-#ifdef PERF_DEBUG
-            atomicAdd(explored_nodes, *insSize);
-#endif
             atomicAdd(activeCount, (*insSize - *delSize));
             if (atomicAdd(activeCount, 0) == 0) {
                 *delSize = -1; // TODO: use one global flag for termination
             }
 			/* we only check if max benefit has been updated when we insert something */
 			if (*insSize > 0 && previousBenefit == *globalBenefit) {
-				// TODO(chenyh) use a universal termination flag which contains different type
-				atomicExch(gc_flag, 2); // we use gc_flag as termination type flag.
-			}
+                if (*globalBenefit == global_max_benefit && atomicCAS(&explored_flag, 0, 1) == 0) {
+                    printf("%d ", *explored_nodes);
+                }
+                counter++;
+                if (counter == switch_counter)
+	    			// TODO(chenyh) use a universal termination flag which contains different type
+    				atomicExch(gc_flag, 2); // we use gc_flag as termination type flag.
+            } else {
+                counter = 0;
+            }
 			previousBenefit = *globalBenefit;
             if (*heap->batchCount > gc_threshold) {
                 atomicCAS(gc_flag, 0, 1);
@@ -223,9 +241,8 @@ __global__ void oneHeapApplicationMixed(Heap<KnapsackItem> *heap, int batchSize,
 void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
              int *max_benefit, int capacity, int inputSize,
              int batchNum, int batchSize, int blockNum, int blockSize,
-             int gc_threshold)
+             int gc_threshold, int switch_counter, int global_max_benefit)
 {
-
     /* prepare heap data */
     Heap<KnapsackItem> heap(batchNum, batchSize);
     Heap<KnapsackItem> *d_heap;
@@ -259,6 +276,9 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
     int *explored_nodes;
     cudaMalloc((void **)&explored_nodes, sizeof(int));
     cudaMemset(explored_nodes, 0, sizeof(int));
+
+    int switch_number = 0;
+    int gc_number = 0;
 	
 	int remainItemCount = INT_MAX;
     int tmpItemCountBefore, tmpItemCountAfter;
@@ -268,6 +288,11 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
     struct timeval gcStartTime, gcEndTime;
     struct timeval bufferStartTime, bufferEndTime;
     double heapTime = 0, gcTime = 0, bufferTime = 0;
+
+#ifdef PERF_DEBUG
+    DEBUG_INIT<<<1, 1>>>();
+    cudaDeviceSynchronize();
+#endif
 	
 	while (remainItemCount != 0) {
 		/* ============= switch to the fifo queue mode ============= */
@@ -298,7 +323,7 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
 															 weight, benefit, benefitPerWeight,
 															 capacity, inputSize,
 															 heap.globalBenefit, activeCount,
-															 gc_flag, gc_threshold,
+															 gc_flag, gc_threshold, switch_counter, global_max_benefit,
 															 explored_nodes,
 															 init_flag);
 			cudaDeviceSynchronize();
@@ -315,7 +340,7 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
 			invalidFilter(heap, d_heap, batchSize,
 						  weight, benefit, benefitPerWeight,
 						  capacity, inputSize, heap.globalBenefit);
-
+            gc_number++;
             remainItemCount = heap.itemCount();
             cudaMemcpy(&currentBenefit, heap.globalBenefit, sizeof(int), cudaMemcpyDeviceToHost);
 			// check if we should go to buffer
@@ -355,6 +380,7 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
         cudaMemset(buffer.begPos, 0, sizeof(unsigned long long int));
 		cudaMemcpy(buffer.endPos, &heap_item_count, sizeof(unsigned long long int), cudaMemcpyHostToDevice);
 		cudaMemcpy(buffer.globalBenefit, &currentBenefit, sizeof(int), cudaMemcpyHostToDevice);	
+        switch_number++;
 #ifdef PERF_DEBUG
         cout << "done\n";
 #endif
@@ -363,7 +389,7 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
 														 weight, benefit, benefitPerWeight,
 														 capacity, inputSize,
 														 buffer.globalBenefit, activeCount,
-														 gc_flag, gc_threshold,
+														 gc_flag, gc_threshold, switch_counter, global_max_benefit,
 														 explored_nodes,
 														 init_flag);
 		cudaDeviceSynchronize();
@@ -380,6 +406,7 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
                 weight, benefit, benefitPerWeight,
                 capacity, inputSize,
                 buffer.globalBenefit);
+        gc_number++;
 		remainItemCount = buffer.getBufferSize();
 #ifdef PERF_DEBUG
         setTime(&gcEndTime);
@@ -403,7 +430,9 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
     cout << getTime(&startTime, &endTime) << " " << h_explored_nodes << endl;
 #else
     cout << heapTime << " " << gcTime << " " << bufferTime << " " 
-        << getTime(&startTime, &endTime) << " " << h_explored_nodes << " ";
+        << getTime(&startTime, &endTime) << " " << h_explored_nodes << " "
+        << heapTime + gcTime + bufferTime << " "
+        << switch_number << " " << gc_number << " ";
 #endif
     cudaFree(d_heap); d_heap = NULL;
 	cudaFree(d_buffer); d_buffer = NULL;

@@ -15,6 +15,7 @@ knapsack: main.cu models.cuh models_fifo.cuh models_pq.cuh models_pq_fifo.cuh gc
 knapsack_debug: main.cu models.cuh models_fifo.cuh models_pq.cuh models_pq_fifo.cuh gc.cuh
 	${NVCC} ${NVCCFLAG} -I${TD_HEAP_DIR} -I${BUFFER_DIR} ${KNAPSACK_FLAG} ${DEBUG_FLAG} $< -o $@
 
+
 #knapsack_fifo: main.cu models_fifo.cuh
 #	${NVCC} ${NVCCFLAG} -I${TD_HEAP_DIR} -I${BUFFER_DIR} ${KNAPSACK_FLAG} ${DEBUG_FLAG} $< -o $@
 

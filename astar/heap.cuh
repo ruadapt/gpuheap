@@ -189,6 +189,13 @@ class Heap {
 			return itemCount;
 		}
 
+        uint32_t itemCount() {
+            uint32_t psize, bsize;
+            cudaMemcpy(&psize, partialBatchSize, sizeof(uint32_t), cudaMemcpyDeviceToHost);
+            cudaMemcpy(&bsize, batchCount, sizeof(uint32_t), cudaMemcpyDeviceToHost);
+            return psize + bsize * batchSize;
+        }
+
         bool isEmpty() {
             uint32_t psize, bsize;
             cudaMemcpy(&psize, partialBatchSize, sizeof(uint32_t), cudaMemcpyDeviceToHost);
@@ -318,6 +325,8 @@ class Heap {
 
 
 			if (!threadIdx.x) {
+                /*printf("%d %u %u\n", */
+                        /*blockIdx.x, *batchCount, min(heapItems[0].f_, heapItems[batchSize].f_));*/
 				//            *tmpIdx = getReversedIdx(atomicSub(batchCount, 1));
 				*tmpIdx = atomicSub(batchCount, 1);
 				// if no more batches in the heap

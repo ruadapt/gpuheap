@@ -1,17 +1,11 @@
 nvcc = nvcc
-nvccflag = -g -G -std=c++11 -O0 -arch=sm_61
+nvccflag = -g -G -std=c++11 -O3 -arch=sm_61
 debug = -DDEBUG
 
-all: app
+all: insdel
 
-app: app.cu heap.cuh sort.cuh util.hpp
-	$(nvcc) $(nvccflag) $< -o $@
-
-debug: app.cu heap.cuh sort.cuh util.hpp
-	$(nvcc) $(nvccflag) $(debug) $< -o app
-
-test: test.cu heap.cuh sort.cuh util.hpp
+insdel: insdel.cu heap.cuh heap_api.cuh sort.cuh util.hpp
 	$(nvcc) $(nvccflag) $< -o $@
 
 clean:
-	rm -rf app test
+	rm -rf insdel

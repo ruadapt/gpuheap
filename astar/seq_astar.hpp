@@ -75,11 +75,15 @@ uint32_t GetMap(uint32_t i, uint32_t *map) {
     return (map[index] >> offset) & 1U;
 }
 
+uint32_t GetWMap(uint32_t i, uint32_t n, uint8_t *wmap) {
+    return wmap[8 * i + n];
+}
+
 bool IsTarget(uint32_t i, uint32_t h, uint32_t w) {
     return i != UINT_MAX && (GetX(i, w) == w - 1) && (GetY(i, w) == h - 1);
 }
 
-uint32_t SeqAstarSearch(uint32_t *map, uint32_t h, uint32_t w) {
+uint32_t SeqAstarSearch(uint32_t *map, uint8_t *wmap, uint32_t h, uint32_t w) {
 
     priority_queue<uint64_t, vector<uint64_t>, std::greater<uint64_t>> open_list;
     vector<uint32_t> close_list(h * w, UINT_MAX);
@@ -101,75 +105,75 @@ uint32_t SeqAstarSearch(uint32_t *map, uint32_t h, uint32_t w) {
         if (item_g > close_list[item_node]) continue;
         uint32_t node1 = Get1(item_node, h, w);
         if (IsTarget(node1, h, w)) {
-            close_list[node1] = item_g + 3;
+            close_list[node1] = item_g + GetWMap(item_node, 0, wmap);
             break;
         }
-        if (GetMap(node1, map) && close_list[node1] > item_g + 3) {
-            close_list[node1] = item_g + 3;
-            open_list.push(GenerateItem(H(node1, h, w) + item_g + 3, node1));
+        if (GetMap(node1, map) && close_list[node1] > item_g + GetWMap(item_node, 0, wmap)) {
+            close_list[node1] = item_g + GetWMap(item_node, 0, wmap);
+            open_list.push(GenerateItem(H(node1, h, w) + item_g + GetWMap(item_node, 0, wmap), node1));
         }
         uint32_t node2 = Get2(item_node, h, w);
         if (IsTarget(node2, h, w)) {
-            close_list[node2] = item_g + 2;
+            close_list[node2] = item_g + GetWMap(item_node, 1, wmap);
             break;
         }
-        if (GetMap(node2, map) && close_list[node2] > item_g + 2) {
-            close_list[node2] = item_g + 2;
-            open_list.push(GenerateItem(H(node2, h, w) + item_g + 2, node2));
+        if (GetMap(node2, map) && close_list[node2] > item_g + GetWMap(item_node, 1, wmap)) {
+            close_list[node2] = item_g + GetWMap(item_node, 1, wmap);
+            open_list.push(GenerateItem(H(node2, h, w) + item_g + GetWMap(item_node, 1, wmap), node2));
         }
         uint32_t node3 = Get3(item_node, h, w);
         if (IsTarget(node3, h, w)) {
-            close_list[node3] = item_g + 2;
+            close_list[node3] = item_g + GetWMap(item_node, 2, wmap);
             break;
         }
-        if (GetMap(node3, map) && close_list[node3] > item_g + 2) {
-            close_list[node3] = item_g + 2;
-            open_list.push(GenerateItem(H(node3, h, w) + item_g + 2, node3));
+        if (GetMap(node3, map) && close_list[node3] > item_g + GetWMap(item_node, 2, wmap)) {
+            close_list[node3] = item_g + GetWMap(item_node, 2, wmap);
+            open_list.push(GenerateItem(H(node3, h, w) + item_g + GetWMap(item_node, 2, wmap), node3));
         }
         uint32_t node4 = Get4(item_node, h, w);
         if (IsTarget(node4, h, w)) {
-            close_list[node4] = item_g + 2;
+            close_list[node4] = item_g + GetWMap(item_node, 3, wmap);
             break;
         }
-        if (GetMap(node4, map) && close_list[node4] > item_g + 2) {
-            close_list[node4] = item_g + 2;
-            open_list.push(GenerateItem(H(node4, h, w) + item_g + 2, node4));
+        if (GetMap(node4, map) && close_list[node4] > item_g + GetWMap(item_node, 3, wmap)) {
+            close_list[node4] = item_g + GetWMap(item_node, 3, wmap);
+            open_list.push(GenerateItem(H(node4, h, w) + item_g + GetWMap(item_node, 3, wmap), node4));
         }
         uint32_t node5 = Get5(item_node, h, w);
         if (IsTarget(node5, h, w)) {
-            close_list[node5] = item_g + 1;
+            close_list[node5] = item_g + GetWMap(item_node, 4, wmap);
             break;
         }
-        if (GetMap(node5, map) && close_list[node5] > item_g + 1) {
-            close_list[node5] = item_g + 1;
-            open_list.push(GenerateItem(H(node5, h, w) + item_g + 1, node5));
+        if (GetMap(node5, map) && close_list[node5] > item_g + GetWMap(item_node, 4, wmap)) {
+            close_list[node5] = item_g + GetWMap(item_node, 4, wmap);
+            open_list.push(GenerateItem(H(node5, h, w) + item_g + GetWMap(item_node, 4, wmap), node5));
         }
         uint32_t node6 = Get6(item_node, h, w);
         if (IsTarget(node6, h, w)) {
-            close_list[node6] = item_g + 3;
+            close_list[node6] = item_g + GetWMap(item_node, 5, wmap);
             break;
         }
-        if (GetMap(node6, map) && close_list[node6] > item_g + 3) {
-            close_list[node6] = item_g + 3;
-            open_list.push(GenerateItem(H(node6, h, w) + item_g + 3, node6));
+        if (GetMap(node6, map) && close_list[node6] > item_g + GetWMap(item_node, 5, wmap)) {
+            close_list[node6] = item_g + GetWMap(item_node, 5, wmap);
+            open_list.push(GenerateItem(H(node6, h, w) + item_g + GetWMap(item_node, 5, wmap), node6));
         }
         uint32_t node7 = Get7(item_node, h, w);
         if (IsTarget(node7, h, w)) {
-            close_list[node7] = item_g + 1;
+            close_list[node7] = item_g + GetWMap(item_node, 6, wmap);
             break;
         }
-        if (GetMap(node7, map) && close_list[node7] > item_g + 1) {
-            close_list[node7] = item_g + 1;
-            open_list.push(GenerateItem(H(node7, h, w) + item_g + 1, node7));
+        if (GetMap(node7, map) && close_list[node7] > item_g + GetWMap(item_node, 6, wmap)) {
+            close_list[node7] = item_g + GetWMap(item_node, 6, wmap);
+            open_list.push(GenerateItem(H(node7, h, w) + item_g + GetWMap(item_node, 6, wmap), node7));
         }
         uint32_t node8 = Get8(item_node, h, w);
         if (IsTarget(node8, h, w)) {
-            close_list[node8] = item_g + 2;
+            close_list[node8] = item_g + GetWMap(item_node, 7, wmap);
             break;
         }
-        if (GetMap(node8, map) && close_list[node8] > item_g + 2) {
-            close_list[node8] = item_g + 2;
-            open_list.push(GenerateItem(H(node8, h, w) + item_g + 2, node8));
+        if (GetMap(node8, map) && close_list[node8] > item_g + GetWMap(item_node, 7, wmap)) {
+            close_list[node8] = item_g + GetWMap(item_node, 7, wmap);
+            open_list.push(GenerateItem(H(node8, h, w) + item_g + GetWMap(item_node, 7, wmap), node8));
         }
     }
 #ifdef DEBUG
@@ -178,7 +182,7 @@ uint32_t SeqAstarSearch(uint32_t *map, uint32_t h, uint32_t w) {
     return close_list[h * w - 1];
 }
 
-void SeqAstarSearch1(uint32_t *map, uint32_t h, uint32_t w, vector<uint32_t> &g_list) {
+void SeqAstarSearch1(uint32_t *map, uint8_t *wmap, uint32_t h, uint32_t w, vector<uint32_t> &g_list) {
 
     priority_queue<uint64_t, vector<uint64_t>, std::greater<uint64_t>> open_list;
     vector<uint32_t> close_list(h * w, 0);
@@ -201,58 +205,58 @@ void SeqAstarSearch1(uint32_t *map, uint32_t h, uint32_t w, vector<uint32_t> &g_
 #endif
         uint32_t node1 = Get1(item_node, h, w);
         if (GetMap(node1, map) && close_list[node1] == 0) {
-            if (item_g + 3 < g_list[node1]) {
-                g_list[node1] = item_g + 3;
-                open_list.push(GenerateItem(H(node1, h, w) + item_g + 3, node1));
+            if (item_g + GetWMap(item_node, 0, wmap) < g_list[node1]) {
+                g_list[node1] = item_g + GetWMap(item_node, 0, wmap);
+                open_list.push(GenerateItem(H(node1, h, w) + item_g + GetWMap(item_node, 0, wmap), node1));
             }
         }
         uint32_t node2 = Get2(item_node, h, w);
         if (GetMap(node2, map) && close_list[node2] == 0) {
-            if (item_g + 2 < g_list[node2]) {
-                g_list[node2] = item_g + 2;
-                open_list.push(GenerateItem(H(node2, h, w) + item_g + 2, node2));
+            if (item_g + GetWMap(item_node, 1, wmap) < g_list[node2]) {
+                g_list[node2] = item_g + GetWMap(item_node, 1, wmap);
+                open_list.push(GenerateItem(H(node2, h, w) + item_g + GetWMap(item_node, 1, wmap), node2));
             }
         }
         uint32_t node3 = Get3(item_node, h, w);
         if (GetMap(node3, map) && close_list[node3] == 0) {
-            if (item_g + 2 < g_list[node3]) {
-                g_list[node3] = item_g + 2;
-                open_list.push(GenerateItem(H(node3, h, w) + item_g + 2, node3));
+            if (item_g + GetWMap(item_node, 2, wmap) < g_list[node3]) {
+                g_list[node3] = item_g + GetWMap(item_node, 2, wmap);
+                open_list.push(GenerateItem(H(node3, h, w) + item_g + GetWMap(item_node, 2, wmap), node3));
             }
         }
         uint32_t node4 = Get4(item_node, h, w);
         if (GetMap(node4, map) && close_list[node4] == 0) {
-            if (item_g + 2 < g_list[node4]) {
-                g_list[node4] = item_g + 2;
-                open_list.push(GenerateItem(H(node4, h, w) + item_g + 2, node4));
+            if (item_g + GetWMap(item_node, 3, wmap) < g_list[node4]) {
+                g_list[node4] = item_g + GetWMap(item_node, 3, wmap);
+                open_list.push(GenerateItem(H(node4, h, w) + item_g + GetWMap(item_node, 3, wmap), node4));
             }
         }
         uint32_t node5 = Get5(item_node, h, w);
         if (GetMap(node5, map) && close_list[node5] == 0) {
-            if (item_g + 1 < g_list[node5]) {
-                g_list[node5] = item_g + 1;
-                open_list.push(GenerateItem(H(node5, h, w) + item_g + 1, node5));
+            if (item_g + GetWMap(item_node, 4, wmap) < g_list[node5]) {
+                g_list[node5] = item_g + GetWMap(item_node, 4, wmap);
+                open_list.push(GenerateItem(H(node5, h, w) + item_g + GetWMap(item_node, 4, wmap), node5));
             }
         }
         uint32_t node6 = Get6(item_node, h, w);
         if (GetMap(node6, map) && close_list[node6] == 0) {
-            if (item_g + 3 < g_list[node6]) {
-                g_list[node6] = item_g + 3;
-                open_list.push(GenerateItem(H(node6, h, w) + item_g + 3, node6));
+            if (item_g + GetWMap(item_node, 5, wmap) < g_list[node6]) {
+                g_list[node6] = item_g + GetWMap(item_node, 5, wmap);
+                open_list.push(GenerateItem(H(node6, h, w) + item_g + GetWMap(item_node, 5, wmap), node6));
             }
         }
         uint32_t node7 = Get7(item_node, h, w);
         if (GetMap(node7, map) && close_list[node7] == 0) {
-            if (item_g + 1 < g_list[node7]) {
-                g_list[node7] = item_g + 1;
-                open_list.push(GenerateItem(H(node7, h, w) + item_g + 1, node7));
+            if (item_g + GetWMap(item_node, 6, wmap) < g_list[node7]) {
+                g_list[node7] = item_g + GetWMap(item_node, 6, wmap);
+                open_list.push(GenerateItem(H(node7, h, w) + item_g + GetWMap(item_node, 6, wmap), node7));
             }
         }
         uint32_t node8 = Get8(item_node, h, w);
         if (GetMap(node8, map) && close_list[node8] == 0) {
-            if (item_g + 2 < g_list[node8]) {
-                g_list[node8] = item_g + 2;
-                open_list.push(GenerateItem(H(node8, h, w) + item_g + 2, node8));
+            if (item_g + GetWMap(item_node, 7, wmap) < g_list[node8]) {
+                g_list[node8] = item_g + GetWMap(item_node, 7, wmap);
+                open_list.push(GenerateItem(H(node8, h, w) + item_g + GetWMap(item_node, 7, wmap), node8));
             }
         }
 #ifdef DEBUG

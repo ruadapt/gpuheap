@@ -5,14 +5,14 @@
 //#include <cub/cub.cuh>
 
 template<typename T>
-__device__ inline void swap(T &a, T &b) {
+__device__ inline void _swap(T &a, T &b) {
     T tmp = a;
     a = b;
     b = tmp;
 }
 
-template<typename K, typename V>
-__device__ void ibitonicSort(K *keys, V *vals, int size) {
+template<typename T>
+__device__ void ibitonicSort(T *keys, int size) {
 
     for (int k = 2; k <= size; k *= 2) {
         for (int j = k / 2; j > 0; j /= 2) {
@@ -21,14 +21,12 @@ __device__ void ibitonicSort(K *keys, V *vals, int size) {
                 if (ixj > i) {
                     if ((i & k) == 0) {
                         if (keys[i] > keys[ixj]) {
-                            swap<K>(keys[i], keys[ixj]);
-                            swap<V>(vals[i], vals[ixj]);
+                            _swap<T>(keys[i], keys[ixj]);
                         }
                     }
                     else {
                         if (keys[i] < keys[ixj]) {
-                            swap<K>(keys[i], keys[ixj]);
-                            swap<V>(vals[i], vals[ixj]);
+                            _swap<T>(keys[i], keys[ixj]);
                         }
                     }
                 }
@@ -39,8 +37,8 @@ __device__ void ibitonicSort(K *keys, V *vals, int size) {
 
 }
 
-template<typename K, typename V>
-__device__ void dbitonicSort(K *keys, V *vals, int size) {
+template<typename T>
+__device__ void dbitonicSort(T *keys, int size) {
 
     for (int k = 2; k <= size; k *= 2) {
         for (int j = k / 2; j > 0; j /= 2) {
@@ -49,14 +47,12 @@ __device__ void dbitonicSort(K *keys, V *vals, int size) {
                 if (ixj > i) {
                     if ((i & k) == 0) {
                         if (keys[i] < keys[ixj]) {
-                            swap<K>(keys[i], keys[ixj]);
-                            swap<V>(vals[i], vals[ixj]);
+                            _swap<T>(keys[i], keys[ixj]);
                         }
                     }
                     else {
                         if (keys[i] > keys[ixj]) {
-                            swap<K>(keys[i], keys[ixj]);
-                            swap<V>(vals[i], vals[ixj]);
+                            _swap<T>(keys[i], keys[ixj]);
                         }
                     }
                 }
@@ -68,16 +64,15 @@ __device__ void dbitonicSort(K *keys, V *vals, int size) {
 }
 
 
-template<typename K, typename V>
-__device__ void imergePath(K *aKeys, V *aVals,
-                           K *bKeys, V *bVals,
-                           K *smallKeys, V *smallVals,
-                           K *largeKeys, V *largeVals,
+template<typename T>
+__device__ void imergePath(T *aKeys,
+                           T *bKeys,
+                           T *smallKeys,
+                           T *largeKeys,
                            int size, int smemOffset) {
 
     extern __shared__ int s[];
-    K *tmpKeys = (K *)&s[smemOffset];
-    V *tmpVals = (V *)&tmpKeys[2 * size];
+    T *tmpKeys = (T *)&s[smemOffset];
 
     int lengthPerThread = size * 2 / blockDim.x;
 
@@ -112,12 +107,10 @@ __device__ void imergePath(K *aKeys, V *aVals,
     for (int i = lengthPerThread * threadIdx.x; i < lengthPerThread * threadIdx.x + lengthPerThread; ++i) {
         if (bI == size || (aI < size && aKeys[aI] <= bKeys[bI])) {
             tmpKeys[i] = aKeys[aI];
-            tmpVals[i] = aVals[aI];
             aI++;
         }
         else if (aI == size || (bI < size && aKeys[aI] > bKeys[bI])) {
             tmpKeys[i] = bKeys[bI];
-            tmpVals[i] = bVals[bI];
             bI++;
         }
     }
@@ -125,13 +118,11 @@ __device__ void imergePath(K *aKeys, V *aVals,
 
     for (int i = threadIdx.x; i < size; i += blockDim.x) {
         smallKeys[i] = tmpKeys[i];
-        smallVals[i] = tmpVals[i];
     }
     __syncthreads();
 
     for (int i = threadIdx.x; i < size; i += blockDim.x) {
         largeKeys[i] = tmpKeys[size + i];
-        largeVals[i] = tmpVals[size + i];
     }
     __syncthreads();
 }

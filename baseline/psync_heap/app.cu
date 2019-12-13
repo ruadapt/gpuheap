@@ -110,7 +110,7 @@ int main(int argc, char *argv[]) {
 														d_insTB);
         cudaDeviceSynchronize();
 
-        updateTableBuffer<<<1, 1>>>(d_heap, d_insTB, d_delTB);
+        updateTableBuffer<int, int><<<1, 1>>>(d_heap, d_insTB, d_delTB);
         cudaDeviceSynchronize();
 
 #ifdef DEBUG		
@@ -130,7 +130,7 @@ int main(int argc, char *argv[]) {
 														d_insTB);
         cudaDeviceSynchronize();
 		
-		updateTableBuffer<<<1, 1>>>(d_heap, d_insTB, d_delTB);
+		updateTableBuffer<int, int><<<1, 1>>>(d_heap, d_insTB, d_delTB);
         cudaDeviceSynchronize();
 
 #ifdef DEBUG		
@@ -177,7 +177,7 @@ int main(int argc, char *argv[]) {
 														d_delTB);
         cudaDeviceSynchronize();
 
-        updateTableBuffer<<<1, 1>>>(d_heap, d_insTB, d_delTB);
+        updateTableBuffer<int, int><<<1, 1>>>(d_heap, d_insTB, d_delTB);
         cudaDeviceSynchronize();
 #ifdef DEBUG		
 		// Result check
@@ -195,7 +195,7 @@ int main(int argc, char *argv[]) {
 														d_delTB);
         cudaDeviceSynchronize();
 		
-		updateTableBuffer<<<1, 1>>>(d_heap, d_insTB, d_delTB);
+		updateTableBuffer<int, int><<<1, 1>>>(d_heap, d_insTB, d_delTB);
         cudaDeviceSynchronize();
 #ifdef DEBUG		
 		// Result check
