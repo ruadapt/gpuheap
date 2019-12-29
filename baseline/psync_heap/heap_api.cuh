@@ -17,7 +17,7 @@ void psyncHeapInsert(Heap<K> *heap, TB<K> *insTB, TB<K> *delTB,
     int smemSize = 10 * batchSize * sizeof(K);
     for (int i = 0; i < insert_num / batchSize; i++) {
         insertItems<K><<<1, blockSize, smemSize>>>(heap, 
-                                                keys + i * batchSize,
+                                               keys + i * batchSize,
                                                 insTB);
         cudaDeviceSynchronize();
 

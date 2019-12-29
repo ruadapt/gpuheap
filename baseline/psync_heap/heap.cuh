@@ -2,6 +2,7 @@
 #define HEAP_CUH
 
 #include "sort.cuh"
+
 #include <iostream>
 #include <cstdio>
 
@@ -187,47 +188,82 @@ public:
         return batchCount;
     }
 
-    void checkHeap() {
+    bool checkBatch() {
 				
-        T *h_key = new T[batchSize * (maxIdx(batchCount) + 1)];
-        int *h_status = new int[maxIdx(batchCount) + 1];
-        int h_batchCount = batchCount;
+        T *h_key = new T[batchSize * batchCount];
+        int *h_status = new int[batchCount];
 		
-        cudaMemcpy(h_key, heapKeys, sizeof(T) * batchSize * (maxIdx(h_batchCount) + 1), cudaMemcpyDeviceToHost);
-        cudaMemcpy(h_status, status, sizeof(int) * (maxIdx(batchCount) + 1), cudaMemcpyDeviceToHost);
+        cudaMemcpy(h_key, heapKeys, sizeof(T) * batchSize * batchCount, cudaMemcpyDeviceToHost);
+        cudaMemcpy(h_status, status, sizeof(int) * batchCount, cudaMemcpyDeviceToHost);
 
-        for (int i = 0; i < maxIdx(h_batchCount) + 1; ++i) {
-            if (i != 0  && h_key[i * batchSize] < h_key[i / 2 * batchSize]) {
-                cout << "Error1" << endl;
-                return;
+        for (int i = 0; i < batchCount; ++i) {
+            for (int j = 1; j < batchSize; ++j) {
+                if (h_key[i * batchSize + j] < h_key[i * batchSize + j - 1]) {
+                        cout << "Error2 batch " << i 
+                            << " element " << j  << " | " << h_key[i * batchSize + j]
+                            << " < element " << j - 1 << " | " << h_key[i * batchSize + j - 1] 
+                            << endl;
+                            return false;
+                        }
+                }
+        }
+        return true;
+    }
+
+    bool checkHeap() {
+				
+        T *h_key = new T[batchSize * batchCount];
+        int *h_status = new int[batchCount];
+		
+        cudaMemcpy(h_key, heapKeys, sizeof(T) * batchSize * batchCount, cudaMemcpyDeviceToHost);
+        cudaMemcpy(h_status, status, sizeof(int) * batchCount, cudaMemcpyDeviceToHost);
+
+        for (int i = 0; i < batchCount; ++i) {
+            if (i != 0  && h_key[i * batchSize] < h_key[((i + 1) / 2 - 1) * batchSize]) {
+                cout << "Error1 batch " << i 
+                << " first element " << h_key[i * batchSize]
+                << " < last element " << h_key[((i + 1) / 2 - 1) * batchSize + batchSize - 1] 
+                << endl;
+                return false;
             }
             for (int j = 1; j < batchSize; ++j) {
                 if (h_key[i * batchSize + j] < h_key[i * batchSize + j - 1]) {
-                    cout << "Error2" << endl;
-                    return;
+                        cout << "Error2 batch " << i 
+                            << " element " << j  << " | " << h_key[i * batchSize + j]
+                            << " < element " << j - 1 << " | " << h_key[i * batchSize + j - 1] 
+                            << endl;
+                            return false;
+                        }
                 }
-            }
         }
-
+        return true;
     }
+
+
 
     void printHeap() {
 		
 //		delTableBuffer->printTB();
 //		insTableBuffer->printTB();
 		
-        T *h_key = new T[batchSize * (maxIdx(batchCount) + 1)];
-        int *h_status = new int[maxIdx(batchCount) + 1];
-        int h_batchCount = batchCount;
+        T *h_key = new T[batchSize * batchCount];
+        int *h_status = new int[batchCount];
 		
-        cudaMemcpy(h_key, heapKeys, sizeof(T) * batchSize * (maxIdx(h_batchCount) + 1), cudaMemcpyDeviceToHost);
-        cudaMemcpy(h_status, status, sizeof(int) * (maxIdx(batchCount) + 1), cudaMemcpyDeviceToHost);
+        cudaMemcpy(h_key, heapKeys, sizeof(T) * batchSize * batchCount, cudaMemcpyDeviceToHost);
+        cudaMemcpy(h_status, status, sizeof(int) * batchCount, cudaMemcpyDeviceToHost);
 
-        for (int i = 0; i < maxIdx(h_batchCount) + 1; ++i) {
+        int counter = 0;
+        cout << "# of batches " << batchCount << endl;
+        for (int i = 0; i < batchCount; ++i) {
             cout << "batch " << i << "_" << h_status[i] << ": ";
             for (int j = 0; j < batchSize; ++j) {
                 cout << h_key[i * batchSize + j];
                 cout << " | ";
+                counter++;
+                if (counter == 8) {
+                    cout <<endl;
+                    counter = 0;
+                }
             }
             cout << endl;
         }
@@ -288,6 +324,7 @@ __global__ void insertItems(Heap<T> *heap,
             insTableBuffer->target[index] = getReversedIdx(heap->batchCount);
             insTableBuffer->node[index] = getNextIdxToTarget(0, insTableBuffer->target[index]);
             insTableBuffer->endIdx++;
+            /*printf("table buffer size: %d\n", insTableBuffer->endIdx);*/
             heap->batchCount++;
         }
         __syncthreads();
@@ -502,7 +539,7 @@ __global__ void deleteUpdate(Heap<T> *heap,
 		
 		int tableIdx = entryStartIdx + i;
 		int parentIdx = delTableBuffer->node[tableIdx];
-		int lchildIdx = parentIdx * 2 + 1;
+		int lchildIdx = (parentIdx + 1) * 2 - 1;
 		int rchildIdx = lchildIdx + 1;
 				
 		if (heap->status[lchildIdx] == UNUSED) {

@@ -72,7 +72,7 @@ __device__ void imergePath(T *aKeys,
                            int size, int smemOffset) {
 
     extern __shared__ int s[];
-    T *tmpKeys = (T *)&s[smemOffset];
+    T *tmpKeys = (T *)&s[smemOffset * sizeof(T) / sizeof(int)];
 
     int lengthPerThread = size * 2 / blockDim.x;
 

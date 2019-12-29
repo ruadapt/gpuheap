@@ -125,6 +125,9 @@ int main(int argc, char *argv[]) {
         cudaDeviceSynchronize();
     }
 
+    cudaMemcpy(&h_heap, d_heap, sizeof(Heap<int>), cudaMemcpyHostToDevice);
+    h_heap.checkHeap();
+
     setTime(&startTime);
 
     // Insert
@@ -175,6 +178,10 @@ int main(int argc, char *argv[]) {
 		updateTableBuffer<<<1, 1>>>(d_heap, d_insTB, d_delTB, d_status);
         cudaDeviceSynchronize();
     }
+
+    cudaMemcpy(&h_heap, d_heap, sizeof(Heap<int>), cudaMemcpyHostToDevice);
+    h_heap.checkHeap();
+
 
     for (int i = 0; i < (initNum + insertNum) / batchSize; i++) {
         deleteItems<<<1, blockSize>>>(d_heap, 
