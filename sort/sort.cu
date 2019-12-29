@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <time.h>
+#include <queue>
 
 #ifdef THRUST_SORT
 #include <thrust/device_vector.h>
@@ -16,7 +17,6 @@ using namespace std;
 __global__ void concurrentKernel(Heap<int> *heap, int *items, int arraySize, int batchSize) {
 
     if (blockIdx.x < gridDim.x / 2) {
-        batchSize /= 3;
         int batchNeed = (arraySize + batchSize - 1) / batchSize;
         // insertion
         for (int i = blockIdx.x; i < batchNeed; i += gridDim.x / 2) {
@@ -119,6 +119,8 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < arrayNum; ++i) {
         oriItems[arrayNum + i] = rand() % (5 * beginNum) + 5 * beginNum;
     }
+
+    int *h_tItems = new int[2 * arrayNum];
 #ifdef THRUST_SORT
     // thrust sort
     int *thrustItems;
@@ -136,9 +138,20 @@ int main(int argc, char *argv[]) {
     setTime(&endTime);
     cout << "thrust time: " << getTime(&startTime, &endTime) << "ms\n";
 
-    int *h_tItems = new int[2 * arrayNum];
-
     cudaMemcpy(h_tItems, thrustItems, sizeof(int) * 2 * arrayNum, cudaMemcpyDeviceToHost);
+#else
+    setTime(&startTime);
+
+    queue<int> q;
+    for (int i = 0; i < arrayNum * 2; ++i) {
+        q.push(oriItems[i]);
+    }
+    for (int i = 0; i < arrayNum * 2; ++i) {
+        h_tItems[i] = q.front();
+        q.pop();
+    }
+    setTime(&endTime);
+    cout << "cpu heap time: " << getTime(&startTime, &endTime) << "ms\n";
 #endif
 /*
     cout << "key: ";

@@ -1,5 +1,5 @@
 nvcc = nvcc
-nvccflag = -g -G -std=c++11 -O3 -arch=sm_61 -DHEAP_SORT -DTHRUST_SORT #-DINSERT_SMEM
+nvccflag = -g -G -std=c++11 -O0 -arch=sm_61 -DHEAP_SORT #-DTHRUST_SORT #-DINSERT_SMEM
 testflag = -DINSERT_TEST -DDELETE_TEST -DCONCURRENT_TEST
 heappath = ../heap/
 
