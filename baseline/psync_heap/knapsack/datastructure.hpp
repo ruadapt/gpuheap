@@ -15,7 +15,7 @@ struct KnapsackItem {
     int third;
     int fourth;
 
-    __host__ __device__ KnapsackItem(int a = 0, int b = 0, int c = -1, int d = INT_MAX)
+    __host__ __device__ KnapsackItem(int a = INT_MAX, int b = 0, int c = 0, int d = 0)
         : first(a), second(b), third(c), fourth(d) {
     }
 
@@ -75,7 +75,8 @@ struct KnapsackItem {
 inline std::ostream& operator << (std::ostream& o, const KnapsackItem& a)
 {
     //o << "Benefit: " << -a.first << " Weight: " << a.second << " Index: " << a.third << " Sequence: " << std::bitset<64>(a.fourth);
-    o << "Benefit: " << -a.first << " Weight: " << a.second << " Index: " << (int)a.third;
+//    o << "Benefit: " << -a.first << " Weight: " << a.second << " Index: " << (int)a.third;
+    o << -a.first << "," << a.second << "," << (int)a.third;
     return o;
 }
 

@@ -18,9 +18,8 @@ bool cmp(KnapsackItem a, KnapsackItem b)
 
 int main(int argc, char *argv[])
 {
-    if (argc != 11) {
-        cout << "./knapsack [dataset] [batchnum] [batchsize] [blocknum] [blocksize] \
-            [gcThreshold] [model] [delAllowed] [gcThreshold] [expandThreshold] [endingBlockNum]\n";
+    if (argc != 6) {
+        cout << "./knapsack [dataset] [batchnum] [batchsize] [blocknum] [blocksize]\n";
         return 1;
     }
     ifstream inputFile;
@@ -29,11 +28,6 @@ int main(int argc, char *argv[])
     int batchSize = atoi(argv[3]);
     int blockNum = atoi(argv[4]);
     int blockSize = atoi(argv[5]);
-    int gc_threshold = atoi(argv[6]);
-    int model = atoi(argv[7]);
-    int has_maxbenefit = atoi(argv[8]);
-    int switch_counter = atoi(argv[9]);
-    /*int endingBlockNum = atoi(argv[10]);*/
 
     inputFile.open(argv[1]);
 
@@ -52,12 +46,11 @@ int main(int argc, char *argv[])
 
     inputFile.close();
 
-    if (has_maxbenefit == 1) {
-        inputFile.open(strcat(argv[1], ".res"));
-        inputFile >> max_benefit;
-        inputFile.close();
-        cout << "max_benefit:" << max_benefit << endl;
-    }
+    inputFile.open(strcat(argv[1], ".res"));
+    inputFile >> max_benefit;
+    inputFile.close();
+    if (max_benefit == 0) return -1;
+    cout << "max_benefit:" << max_benefit << endl;
 
 	// Sort items by ppw
 	KnapsackItem *items = new KnapsackItem[inputSize];
@@ -86,6 +79,8 @@ int main(int argc, char *argv[])
     cudaMalloc((void **)&d_max_benefit, sizeof(int));
     cudaMemset(d_max_benefit, 0, sizeof(int));
 
+    int gc_threshold = 10240000;
+    int switch_counter = 0;
     oneheapfifoswitch(d_weight, d_benefit, d_benefitPerWeight,
             d_max_benefit, capacity, inputSize,
             batchNum, batchSize, blockNum, blockSize,

@@ -108,7 +108,7 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
     cudaMemcpy(d_delTB, &h_delTB, sizeof(TB<KnapsackItem>), cudaMemcpyHostToDevice);
 
     //  prepare fifo queue (buffer) 
-    Buffer<KnapsackItem> buffer(batchSize * batchNum * 10);
+    Buffer<KnapsackItem> buffer(batchSize * batchNum);
     Buffer<KnapsackItem> *d_buffer;
     cudaMalloc((void **)&d_buffer, sizeof(Buffer<KnapsackItem>));
     cudaMemcpy(d_buffer, &buffer, sizeof(Buffer<KnapsackItem>), cudaMemcpyHostToDevice);	
@@ -145,7 +145,10 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
                     (d_heap, d_insTB, d_delTB,
                     d_ins_items, batchSize,
                     blockNum, blockSize, batchSize);
-        
+    cudaMemcpy(&heap, d_heap, sizeof(Heap<KnapsackItem>), cudaMemcpyDeviceToHost);
+//    heap.printHeap();
+    /*cout << "init done\n";*/
+
     int h_benefit;
     struct timeval startTime, endTime;
 	setTime(&startTime);
@@ -157,8 +160,8 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
     cudaMalloc((void **)&explored_nodes, sizeof(int));
     cudaMemset(explored_nodes, 0, sizeof(int));
 
-    cudaMemcpy(&heap, d_heap, sizeof(Heap<KnapsackItem>), cudaMemcpyDeviceToHost);
-    cout << "init batchCount: " << heap.GetBatchCount() << endl;
+    /*cudaMemcpy(&heap, d_heap, sizeof(Heap<KnapsackItem>), cudaMemcpyDeviceToHost);*/
+    /*cout << "init batchCount: " << heap.GetBatchCount() << endl;*/
 
     int iter = 1;
 
@@ -167,11 +170,20 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
                         d_del_items, h_del_size,
                         blockNum, blockSize, batchSize);
 
+        /*cudaMemcpy(h_del_items, d_del_items, sizeof(KnapsackItem) * h_del_size, cudaMemcpyDeviceToHost);*/
+        /*for (int i = 0; i < h_del_size; i++) {*/
+            /*cout << h_del_items[i] << " | ";*/
+            /*if (i % 8 == 7) cout << endl;*/
+        /*}*/
+
         cudaMemset(d_ins_size, 0, sizeof(int));
 
-        cudaMemcpy(&h_benefit, heap.globalBenefit, sizeof(int), cudaMemcpyDeviceToHost);
         cudaMemcpy(&heap, d_heap, sizeof(Heap<KnapsackItem>), cudaMemcpyDeviceToHost);
-        cout << "iter " << iter << " delete: delSize: " << h_del_size << " benefit: " << h_benefit << " " << endl;
+        cudaMemcpy(&h_benefit, heap.globalBenefit, sizeof(int), cudaMemcpyDeviceToHost);
+        /*cout << "delete check\n";*/
+        /*cout << "iter " << iter << " delete: delSize: " << h_del_size << " benefit: " << h_benefit << " " << endl;*/
+        heap.checkHeap();
+//        heap.printHeap();
 
         psyncAppKernel<<<blockNum, blockSize>>>
                  (weight, benefit, benefitPerWeight,
@@ -181,20 +193,28 @@ void oneheapfifoswitch(int *weight, int *benefit, float *benefitPerWeight,
                   batchSize);
 
         cudaMemcpy(&h_ins_size, d_ins_size, sizeof(int), cudaMemcpyDeviceToHost);
-        cout << "real insSize " << h_ins_size << endl;
+        /*cout << "real insSize " << h_ins_size << endl;*/
         h_explored_nodes += h_ins_size;
         h_ins_size = (h_ins_size + batchSize - 1) / batchSize * batchSize;
-        
+
+        /*cudaMemcpy(h_ins_items, d_ins_items, sizeof(KnapsackItem) * h_ins_size, cudaMemcpyDeviceToHost);*/
+        /*for (int i = 0; i < h_ins_size; i++) {*/
+            /*cout << h_ins_items[i] << " | ";*/
+            /*if (i % 8 == 7) cout << endl;*/
+        /*}*/
+       
         psyncHeapInsert(d_heap, d_insTB, d_delTB,
                         d_ins_items, h_ins_size,
                         blockNum, blockSize, batchSize);
 
 
         cudaMemcpy(&h_benefit, heap.globalBenefit, sizeof(int), cudaMemcpyDeviceToHost);
+
         cudaMemcpy(&heap, d_heap, sizeof(Heap<KnapsackItem>), cudaMemcpyDeviceToHost);
-        cout << "iter " << iter << " insert: insSize: " << h_ins_size << " benefit: " << h_benefit << " " << endl;
+        /*cout << "insert check\n";*/
         heap.checkHeap();
 //        heap.printHeap();
+        /*cout << "iter " << iter << " insert: insSize: " << h_ins_size << " benefit: " << h_benefit << " " << endl;*/
 
         cudaMemcpy(d_ins_items, h_ins_items, sizeof(KnapsackItem) * 2 * batchSize * batchNum, cudaMemcpyHostToDevice);
         cudaMemcpy(&heap, d_heap, sizeof(Heap<KnapsackItem>), cudaMemcpyDeviceToHost);
