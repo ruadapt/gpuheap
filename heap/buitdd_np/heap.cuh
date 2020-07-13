@@ -1,15 +1,19 @@
 #ifndef HEAP_CUH
 #define HEAP_CUH
 
-#include "sort.cuh"
-#include "utils.cuh"
+#include "../heaputil.cuh"
+
+#define AVAIL 0
+#define INSHOLD 1
+#define DELMOD 2
+#define INUSE 3
 
 using namespace std;
 
 template <typename K>
 class Heap {
 public:
-
+        K init_limits;
         int batchNum;
         int batchSize;
 
@@ -22,13 +26,14 @@ public:
         int *status;
 
         Heap(int _batchNum,
-            int _batchSize) : batchNum(_batchNum), batchSize(_batchSize) {
+            int _batchSize,
+            K _init_limits = 0) : batchNum(_batchNum), batchSize(_batchSize), init_limits(_init_limits) {
             // prepare device heap
             cudaMalloc((void **)&heapItems, sizeof(K) * batchSize * (batchNum + 1));
             // initialize heap items with max value
             K *tmp = new K[batchSize * (batchNum + 1)];
             for (int i = 0; i < (batchNum + 1) * batchSize; i++) {
-                tmp[i] = INIT_LIMITS;
+                tmp[i] = init_limits;
             }
             cudaMemcpy(heapItems, tmp, sizeof(K) * batchSize * (batchNum + 1), cudaMemcpyHostToDevice);
             delete []tmp; tmp = NULL;
@@ -165,21 +170,21 @@ public:
             return !psize && !bsize;
         }
 
-        __inline__ __device__ uint32 getReversedIdx(uint32 oriIdx) {
+        __inline__ __device__ uint32_t getReversedIdx(uint32_t oriIdx) {
             int l = __clz(oriIdx) + 1;
             return (__brev(oriIdx) >> l) | (1 << (32-l));
         }
 
-        uint32 hostGetReversedIdx(uint32 oriIdx) {
+        uint32_t hostGetReversedIdx(uint32_t oriIdx) {
             if (oriIdx == 1) return 1;
-            uint32 i = oriIdx;
+            uint32_t i = oriIdx;
             int l = 0;
             while (i > 0) {
                 l++;
                 i>>= 1;
             }
             l = 32 - (l - 1);
-            uint32 res = 0;
+            uint32_t res = 0;
             for (int i = 0; i < 32; i++) {
                 int n = oriIdx % 2;
                 oriIdx >>= 1;
@@ -314,7 +319,7 @@ public:
 
         batchCopy(sMergedItems, 
                   heapItems + lastIdx * batchSize, 
-                  batchSize, true);
+                  batchSize, true, init_limits);
 
         if (threadIdx.x == 0) {
             changeStatus(&status[lastIdx], INUSE, AVAIL);
@@ -442,7 +447,7 @@ public:
                     sMergedItems[i] = items[i];
                 }
                 else {
-                    sMergedItems[i] = INIT_LIMITS;
+                    sMergedItems[i] = init_limits;
                 }
             }
             __syncthreads();

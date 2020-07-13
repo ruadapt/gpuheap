@@ -1,12 +1,17 @@
 #ifndef HEAP_CUH
 #define HEAP_CUH
 
-#include "utils.cuh"
-#include "sort.cuh"
+#include "../heaputil.cuh"
+
+#define AVAIL 0
+#define INUSE 1
+#define TARGET 2
+#define MARKED 3
 
 template<typename K = int>
 class Heap {
     public:
+        K init_limits;
 
         int batchNum;
         int batchSize;
@@ -20,13 +25,14 @@ class Heap {
         int *status;
 
         Heap(int _batchNum,
-            int _batchSize) : batchNum(_batchNum), batchSize(_batchSize) {
+            int _batchSize,
+            K _init_limits = 0) : batchNum(_batchNum), batchSize(_batchSize), init_limits(_init_limits) {
             // prepare device heap
             cudaMalloc((void **)&heapItems, sizeof(K) * batchSize * (batchNum + 1));
             // initialize heap items with max value
             K *tmp = new K[batchSize * (batchNum + 1)];
             for (int i = 0; i < (batchNum + 1) * batchSize; i++) {
-                tmp[i] = INIT_LIMITS;
+                tmp[i] = init_limits;
             }
             cudaMemcpy(heapItems, tmp, sizeof(K) * batchSize * (batchNum + 1), cudaMemcpyHostToDevice);
             delete []tmp; tmp = NULL;
@@ -146,6 +152,14 @@ class Heap {
                 printf("\n");
             }
 
+        }
+
+        int itemCount() {
+            int h_batchCount;
+            int h_partialBufferSize;
+            cudaMemcpy(&h_batchCount, batchCount, sizeof(int), cudaMemcpyDeviceToHost);
+            cudaMemcpy(&h_partialBufferSize, partialBufferSize, sizeof(int), cudaMemcpyDeviceToHost);
+            return h_partialBufferSize + h_batchCount * batchSize;
         }
 
         __device__ int getItemCount() {
@@ -307,7 +321,7 @@ class Heap {
             }
             else if (*tmpType == 0){
 
-                batchCopy(sMergedItems, heapItems + lastIdx * batchSize, batchSize, true);
+                batchCopy(sMergedItems, heapItems + lastIdx * batchSize, batchSize, true, init_limits);
 
                 if (threadIdx.x == 0) {
                     changeStatus(&status[lastIdx], INUSE, AVAIL);
@@ -470,7 +484,7 @@ class Heap {
             // TODO in this way, we can use bitonic sorting
             // but the performance may not be good when size is small
             for (int i = threadIdx.x; i < batchSize; i += blockDim.x) {
-                sMergedItems1[i] = i < size ? items[i] : INIT_LIMITS;
+                sMergedItems1[i] = i < size ? items[i] : init_limits;
             }
             __syncthreads();
 #endif

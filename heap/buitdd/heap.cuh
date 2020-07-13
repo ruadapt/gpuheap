@@ -1,14 +1,19 @@
 #ifndef HEAP_CUH
 #define HEAP_CUH
 
-#include "sort.cuh"
-#include "utils.cuh"
+#include "../heaputil.cuh"
+
+#define AVAIL 0
+#define INSHOLD 1
+#define DELMOD 2
+#define INUSE 3
 
 using namespace std;
 
 template <typename K>
 class Heap {
 public:
+        K init_limits;
 
         int batchNum;
         int batchSize;
@@ -18,17 +23,23 @@ public:
 #ifdef HEAP_SORT
         int *deleteCount;
 #endif
+#ifdef PBS_MODEL
+        int *globalBenefit;
+        uint32_t *tbstate;
+        uint32_t *terminate;
+#endif
         K *heapItems;
         int *status;
 
         Heap(int _batchNum,
-            int _batchSize) : batchNum(_batchNum), batchSize(_batchSize) {
+            int _batchSize,
+            K _init_limits = 0) : init_limits(_init_limits), batchNum(_batchNum), batchSize(_batchSize) {
             // prepare device heap
             cudaMalloc((void **)&heapItems, sizeof(K) * batchSize * (batchNum + 1));
             // initialize heap items with max value
             K *tmp = new K[batchSize * (batchNum + 1)];
             for (int i = 0; i < (batchNum + 1) * batchSize; i++) {
-                tmp[i] = INIT_LIMITS;
+                tmp[i] = init_limits;
             }
             cudaMemcpy(heapItems, tmp, sizeof(K) * batchSize * (batchNum + 1), cudaMemcpyHostToDevice);
             delete []tmp; tmp = NULL;
@@ -44,7 +55,41 @@ public:
             cudaMalloc((void **)&deleteCount, sizeof(int));
             cudaMemset(deleteCount, 0, sizeof(int));
 #endif
+#ifdef PBS_MODEL
+            cudaMalloc((void **)&globalBenefit, sizeof(int));
+            cudaMemset(globalBenefit, 0, sizeof(int));
+            cudaMalloc((void **)&tbstate, 1024 * sizeof(uint32_t));
+            cudaMemset(tbstate, 0, 1024 * sizeof(uint32_t));
+            uint32_t tmp1 = 1;
+            cudaMemcpy(tbstate, &tmp1, sizeof(uint32_t), cudaMemcpyHostToDevice);
+            cudaMalloc((void **)&terminate, sizeof(uint32_t));
+            cudaMemset(terminate, 0, sizeof(uint32_t));
+#endif
         }
+
+        void reset() {
+			K *tmp = new K[batchSize * (batchNum + 1)];
+            for (int i = 0; i < (batchNum + 1) * batchSize; i++) {
+                tmp[i] = init_limits;
+            }
+            cudaMemcpy(heapItems, tmp, sizeof(K) * batchSize * (batchNum + 1), cudaMemcpyHostToDevice);
+            delete []tmp; tmp = NULL;
+
+            cudaMemset(status, AVAIL, sizeof(int) * (batchNum + 1));
+
+            cudaMemset(batchCount, 0, sizeof(int));
+            cudaMemset(partialBufferSize, 0, sizeof(int));
+#ifdef HEAP_SORT
+            cudaMemset(deleteCount, 0, sizeof(int));
+#endif
+#ifdef PBS_MODEL
+            cudaMemset(globalBenefit, 0, sizeof(int));
+            cudaMemset(tbstate, 0, 1024 * sizeof(uint32_t));
+            uint32_t tmp1 = 1;
+            cudaMemcpy(tbstate, &tmp1, sizeof(uint32_t), cudaMemcpyHostToDevice);
+            cudaMemset(terminate, 0, sizeof(uint32_t));
+#endif
+		}
 
         ~Heap() {
             cudaFree(heapItems);
@@ -58,6 +103,13 @@ public:
 #ifdef HEAP_SORT
             cudaFree(deleteCount);
             deleteCount = NULL;
+#endif
+#ifdef PBS_MODEL
+            cudaMemset(globalBenefit, 0, sizeof(int));
+            cudaMemset(tbstate, 0, 1024 * sizeof(uint32_t));
+            uint32_t tmp1 = 1;
+            cudaMemcpy(tbstate, &tmp1, sizeof(uint32_t), cudaMemcpyHostToDevice);
+            cudaMemset(terminate, 0, sizeof(uint32_t));
 #endif
             batchNum = 0;
             batchSize = 0;
@@ -151,11 +203,24 @@ public:
 
         }
 
-        __device__ int getItemCount() {
+       __device__ int getItemCount() {
             changeStatus(&status[0], AVAIL, INUSE);
             int itemCount = *partialBufferSize + *batchCount * batchSize;
             changeStatus(&status[0], INUSE, AVAIL);
             return itemCount;
+        }
+
+        int nodeCount() {
+            int bcount;
+            cudaMemcpy(&bcount, batchCount, sizeof(int), cudaMemcpyDeviceToHost);
+            return bcount;
+        }
+
+        int itemCount() {
+            int psize, bcount;
+            cudaMemcpy(&bcount, batchCount, sizeof(int), cudaMemcpyDeviceToHost);
+            cudaMemcpy(&psize, partialBufferSize, sizeof(int), cudaMemcpyDeviceToHost);
+            return psize + bcount * batchSize;
         }
 
         __host__ bool isEmpty() {
@@ -165,21 +230,21 @@ public:
             return !psize && !bsize;
         }
 
-        __inline__ __device__ uint32 getReversedIdx(uint32 oriIdx) {
+        __inline__ __device__ uint32_t getReversedIdx(uint32_t oriIdx) {
             int l = __clz(oriIdx) + 1;
             return (__brev(oriIdx) >> l) | (1 << (32-l));
         }
 
-        uint32 hostGetReversedIdx(uint32 oriIdx) {
+        uint32_t hostGetReversedIdx(uint32_t oriIdx) {
             if (oriIdx == 1) return 1;
-            uint32 i = oriIdx;
+            uint32_t i = oriIdx;
             int l = 0;
             while (i > 0) {
                 l++;
                 i>>= 1;
             }
             l = 32 - (l - 1);
-            uint32 res = 0;
+            uint32_t res = 0;
             for (int i = 0; i < 32; i++) {
                 int n = oriIdx % 2;
                 oriIdx >>= 1;
@@ -241,7 +306,7 @@ public:
             // only partial batch has items
             // output the partial batch
             size = *partialBufferSize;
-            batchCopy(items + deleteOffset, heapItems, size, true);
+            batchCopy(items + deleteOffset, heapItems, size, true, init_limits);
 
             if (threadIdx.x == 0) {
 #ifdef HEAP_SORT
@@ -314,7 +379,7 @@ public:
 
         batchCopy(sMergedItems, 
                   heapItems + lastIdx * batchSize, 
-                  batchSize, true);
+                  batchSize, true, init_limits);
 
         if (threadIdx.x == 0) {
             changeStatus(&status[lastIdx], INUSE, AVAIL);
@@ -441,7 +506,7 @@ public:
                     sMergedItems[i] = items[i];
                 }
                 else {
-                    sMergedItems[i] = INIT_LIMITS;
+                    sMergedItems[i] = init_limits;
                 }
             }
             __syncthreads();
