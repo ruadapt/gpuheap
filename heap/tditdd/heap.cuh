@@ -514,7 +514,7 @@ class Heap {
                         changeStatus(&status[currentIdx], INUSE, AVAIL);
                         changeStatus(&status[smallerIdx], INUSE, AVAIL);
                     }
-                    __syncthreads();d
+                    __syncthreads();
                     return;
                 }
                 else {
