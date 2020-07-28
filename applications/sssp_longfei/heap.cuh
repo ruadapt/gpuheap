@@ -194,17 +194,18 @@ class Heap {
             printf("batch partial %d_%d:", h_partialBufferSize, h_status[0]);
 
             for (int i = 0; i < h_partialBufferSize; ++i) {
-                printf(" %d", h_items[i]);
+                h_items[i].print();
             }
             printf("\n");
 
             for (int i = 1; i <= h_batchCount; ++i) {
                 printf("batch %d_%d:", i, h_status[i]);
                 for (int j = 0; j < batchSize; ++j) {
-                    printf(" %d", h_items[i * batchSize + j]);
+                    h_items[i * batchSize + j].print();
                 }
                 printf("\n");
             }
+	    delete [] h_items;
 
         }
 
@@ -248,8 +249,7 @@ class Heap {
                 (oriS == TARGET && newS == INUSE ) ||
                 (oriS == INUSE  && newS == AVAIL ) ||
                 (oriS == AVAIL  && newS == INUSE )) {
-                while (atomicCAS(_status, oriS, newS) != oriS){
-                }
+                while (atomicCAS(_status, oriS, newS) != oriS){}
                 return true;
             }
             else {
@@ -346,12 +346,13 @@ class Heap {
         __device__ void deleteUpdate(int smemOffset) {
 
             extern __shared__ int s[];
+	    int *tmpIdx = (int *)&s[smemOffset];
+	    smemOffset += 1;
+            int *tmpType = (int *)&s[smemOffset];
+	    smemOffset += 1;
             K *sMergedItems = (K *)&s[smemOffset];
-            int *tmpIdx = (int *)&s[smemOffset];
 
             smemOffset += sizeof(K) * 3 * batchSize / sizeof(int);
-            int *tmpType = (int *)&s[smemOffset - 1];
-
 
             if (threadIdx.x == 0) {
                 //            *tmpIdx = getReversedIdx(atomicSub(batchCount, 1));
@@ -425,25 +426,29 @@ class Heap {
                 // If the status is not unlocked, than no valid child
                 if (threadIdx.x == 0) {
                     int leftStatus, rightStatus;
-                    leftStatus = atomicCAS(&status[leftIdx], AVAIL, INUSE);
-                    while (leftStatus == INUSE) {
-                        leftStatus = atomicCAS(&status[leftIdx], AVAIL, INUSE);
-                    }
-                    if (leftStatus != AVAIL) {
-                        *tmpType = 0;
-                    }
-                    else {
-                        rightStatus = atomicCAS(&status[rightIdx], AVAIL, INUSE);
-                        while (rightStatus == INUSE) {
-                            rightStatus = atomicCAS(&status[rightIdx], AVAIL, INUSE);
-                        }
-                        if (rightStatus != AVAIL) {
-                            *tmpType = 1;
-                        }
-                        else {
-                            *tmpType = 2;
-                        }
-                    }
+		    if(leftIdx > batchNum) {*tmpType = 0;} else {
+		      leftStatus = atomicCAS(&status[leftIdx], AVAIL, INUSE);
+		      while (leftStatus == INUSE) {
+			  leftStatus = atomicCAS(&status[leftIdx], AVAIL, INUSE);
+		      }
+		      if (leftStatus != AVAIL) {
+			  *tmpType = 0;
+		      }
+		      else {
+		          if(rightIdx > batchNum) {*tmpType = 1;} else {
+			    rightStatus = atomicCAS(&status[rightIdx], AVAIL, INUSE);
+			    while (rightStatus == INUSE) {
+				rightStatus = atomicCAS(&status[rightIdx], AVAIL, INUSE);
+			    }
+			    if (rightStatus != AVAIL) {
+				*tmpType = 1;
+			    }
+			    else {
+				*tmpType = 2;
+			    }
+			  }
+		      }
+		    }
                 }
                 __syncthreads();
 
@@ -568,14 +573,16 @@ class Heap {
             K *sMergedItems1 = (K *)&items[0];
             K *sMergedItems2 = (K *)&s[smemOffset];
             smemOffset += sizeof(K) * batchSize / sizeof(int);
-            int *tmpIdx = (int *)&s[smemOffset - 1];
+            int *tmpIdx = (int *)&s[smemOffset];
+	    smemOffset += 1;
 #else
             // allocate shared memory space
             extern __shared__ int s[];
             K *sMergedItems1 = (K *)&s[smemOffset];
             K *sMergedItems2 = (K *)&sMergedItems1[batchSize];
             smemOffset += sizeof(K) * 2 * batchSize / sizeof(int);
-            int *tmpIdx = (int *)&s[smemOffset - 1];
+            int *tmpIdx = (int *)&s[smemOffset];
+	    smemOffset += 1;
 
             // move insert batch to shared memory
             // may be a partial batch, fill rest part with INT_MAX
