@@ -71,9 +71,11 @@ int main(int argc,char ** argv){
   cudaMemcpy(gpu_distance, distance, sizeof(int) * vert_count, cudaMemcpyHostToDevice);
 
   sssp_heap_node max_node;
-  max_node.vert = MAX_INT;
-  max_node.curr_dist = MAX_INT;
-  Heap_With_Aux < sssp_heap_node, int > cpu_heap(vert_count * 10 / CONFIG_BATCH_SIZE, CONFIG_BATCH_SIZE, max_node, 0);
+  max_node.vert = 135792468;
+  max_node.curr_dist = 135792468;
+  int batch_count = vert_count * 2 / CONFIG_BATCH_SIZE;
+  if(batch_count < 3) {batch_count = 3;}
+  Heap_With_Aux < sssp_heap_node, int > cpu_heap(batch_count, CONFIG_BATCH_SIZE, max_node, 0);
   Heap_With_Aux < sssp_heap_node, int > * gpu_heap;
 
   cudaMalloc((void **)&gpu_heap, sizeof(Heap_With_Aux < sssp_heap_node, int >));
@@ -87,17 +89,24 @@ int main(int argc,char ** argv){
   cudaMemcpy(gpu_init_node, &init_node, sizeof(sssp_heap_node), cudaMemcpyHostToDevice);
   insertInitNode<<<1, 1, 1024>>>(gpu_heap, gpu_init_node);
 
+  int * gpu_term_sig;
+  cudaMalloc((void **)&gpu_term_sig, sizeof(int) * CONFIG_THREAD_GROUP_NUM);
+  cudaMemset(gpu_term_sig, 0, sizeof(int) * CONFIG_THREAD_GROUP_NUM);
+
   printf("Preparation complete\n");
 
   struct timespec start_time, end_time;
   clock_gettime(CLOCK_MONOTONIC, &start_time);
 
   int iteration = 0;
+  int heap_size, pb_size, aux_size;
   do{
-    ssspKernel<<<CONFIG_THREAD_GROUP_NUM, CONFIG_THREAD_NUM, 32768>>>(gpu_heap, gpu_edge_list_index, gpu_edge_dst, gpu_edge_weight, gpu_distance);
+    ssspKernel<<<CONFIG_THREAD_GROUP_NUM, CONFIG_THREAD_NUM, 32768>>>(gpu_heap, gpu_edge_list_index, gpu_edge_dst, gpu_edge_weight, gpu_distance, gpu_term_sig, CONFIG_THREAD_GROUP_NUM);
     ++iteration;
+    if(iteration % 100 == 0){printf("%d\n",iteration);}
     cudaMemcpy(&cpu_heap, gpu_heap, sizeof(Heap_With_Aux < sssp_heap_node, int >), cudaMemcpyDeviceToHost);
-  } while(cpu_heap.heap.itemCount() > 0 || cpu_heap.curr_aux_buf_size > 0);
+    heap_size = cpu_heap.curr_aux_buf_size + cpu_heap.heap.itemCount();
+  } while(heap_size > 0);
 
   clock_gettime(CLOCK_MONOTONIC, &end_time);
   printf("Finished in %d iterations\n", iteration);

@@ -56,14 +56,17 @@ struct Heap_With_Aux {
     SINGLE_THREADED {atomicAdd((int *)&rwlock_y, 1);}
 
     DECLARE_SMEM(int, p_retrieve_size, 1);
-    char need_update; //Always have the same value in all threads
+    char need_update = 0; //Always have the same value in all threads
+
+    SINGLE_THREADED {spinlock_lock();}
+    __syncthreads();
+
     if(curr_aux_buf_size < *count){
       //We hold the spinlock when we fill the aux buffer. However we temporarily release the lock when we do deleteUpdate(). This gives other threads a chance to retrieve concurrently.
       //There are two possible ways to do this. The first way is to release the lock immediately after deleteRoot(), execute deleteUpdate(), then lock it again. The second way is to postpone deleteUpdate() until we finish all processing.
       //The first way may seem simple, but it has a serious drawback. Suppose the first thread group calls deleteRoot() and goes into deleteUpdate(). Then other thread groups come and lock, seeing that there are enough keys in the aux buffer, simply copy them away. When the first thread group finishes deleteUpdate() and comes back, there isn't enough keys in the buffer again.
       //We adopt the second approach here.
 
-      SINGLE_THREADED {spinlock_lock();}
       need_update = heap.deleteRoot(aux_key_buffer + curr_aux_buf_size, *p_retrieve_size);
       for(int i = threadIdx.x;i < *p_retrieve_size;i += blockDim.x){
         aux_data_buffer[i + curr_aux_buf_size] = init_aux;
@@ -97,12 +100,13 @@ struct Heap_With_Aux {
         aux_key_buffer[*p_keep_count + i] = aux_key_buffer[*count + i];
 	aux_data_buffer[*p_keep_count + i] = aux_data_buffer[*count + i];
       }
-      curr_aux_buf_size -= *count;
+      curr_aux_buf_size -= (*count - *p_keep_count);
     }
     __syncthreads();
 
     SINGLE_THREADED {spinlock_unlock();}
     __syncthreads();
+
     //We don't need any of the shared memory now.
     //We measure offsets in bytes, but legacy code measures offsets in ints. Therefore divide offset by 4.
     if(need_update) {heap.deleteUpdate(smemOffset / 4);}
