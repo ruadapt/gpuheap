@@ -1,23 +1,7 @@
 #ifndef HEAPUTIL_CUH
 #define HEAPUTIL_CUH
 
-#include <stdio.h>
 #include "util.cuh"
-
-#define PTR_CONSTRAINT "l"
-
-template < typename T >
-__device__ int isSharedPtr(T * ptr)
-{
-    int res;
-    asm("{"
-        ".reg .pred p;\n\t"
-        "isspacep.shared p, %1;\n\t"
-        "selp.b32 %0, 1, 0, p;\n\t"
-        "}" :
-        "=r"(res): PTR_CONSTRAINT(ptr));
-    return res;
-}
 
 template < typename A, typename B >
 __forceinline__ __device__ void batchCopy(A * dest, B * source, int size){

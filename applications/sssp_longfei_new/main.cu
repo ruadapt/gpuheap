@@ -82,6 +82,11 @@ int main(int argc,char ** argv){
 
   insertInitNode<<<1, 1, 4906>>>(gpu_heap, 0);
 
+  unsigned long long * gpu_inserted_nodes;
+  cudaMalloc((void **)&gpu_inserted_nodes, sizeof(unsigned long long) * CONFIG_THREAD_GROUP_NUM * CONFIG_BATCH_SIZE * CONFIG_CHUNK_SIZE);
+  int * gpu_term_sig;
+  cudaMalloc((void **)&gpu_term_sig, sizeof(int) * CONFIG_THREAD_GROUP_NUM);
+
   printf("Preparation complete\n");
 
   struct timespec start_time, end_time;
@@ -89,7 +94,8 @@ int main(int argc,char ** argv){
 
   int iteration = 0;
   do{
-    ssspKernel<<<CONFIG_THREAD_GROUP_NUM, CONFIG_THREAD_NUM, 32768>>>(gpu_heap, gpu_edge_list_index, gpu_edge_dst, gpu_edge_weight, gpu_distance);
+    cudaMemset(gpu_term_sig, 0, sizeof(int) * CONFIG_THREAD_GROUP_NUM);
+    ssspKernel<<<CONFIG_THREAD_GROUP_NUM, CONFIG_THREAD_NUM, 36864>>>(gpu_heap, gpu_edge_list_index, gpu_edge_dst, gpu_edge_weight, gpu_distance, gpu_inserted_nodes, gpu_term_sig);
     ++iteration;
     //if(iteration % 100 == 0) {printf("%d\n", iteration);}
     cudaMemcpy(&cpu_heap, gpu_heap, sizeof(Heap_With_Aux < unsigned long long, int >), cudaMemcpyDeviceToHost);

@@ -1,6 +1,7 @@
 #ifndef HEAP_CUH
 #define HEAP_CUH
 
+#include <stdio.h>
 #include "util.cuh"
 #include "heaputil.cuh"
 
@@ -157,9 +158,9 @@ public:
       SINGLE_THREADED {curr_pb_size = remaining_pb;}
     } else {
       batchCopy(p_key_buffer1 + remaining, partial_buffer, *p_curr_pb_size);
-      //SINGLE_THREADED {curr_pb_size = 0;}
       int remaining_gap = *p_size - *p_curr_pb_size;
-      *p_curr_batch_count -= 1;
+      SINGLE_THREADED {*p_curr_batch_count -= 1;}
+      __syncthreads();
       spinlock_lock(*p_curr_batch_count);
       SINGLE_THREADED {curr_batch_count = *p_curr_batch_count;} //This assignment must be done after the spinlock is locked, because we guarantee that, whenever a batch is locked, and that batch contains valid data, then curr_batch_count must never drop below that batch. This allows a thread to easily determine whether a batch contains valid data or not, by first locking that batch, then checking curr_batch_count.
       DECLARE_SMEM(int, p_last_batch_status, 1);
@@ -294,6 +295,7 @@ public:
       if(*p_curr_batch_count >= batch_num - 1){
         *need_gc = 1;
         spinlock_unlock(0);
+	printf("GC Unimplemented!\n");
       } else {
         atomicAdd(rwlock_y, 1);
       }
