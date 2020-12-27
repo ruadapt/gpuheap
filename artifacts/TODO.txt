@@ -1,0 +1,6 @@
+1. Clean makefile.
+2. Add support for other devices(seastar) in Makefile.
+3. Write a universal test script for all sub scripts.
+4. Add astar, sssp experiments (datasets too large)
+5. Format script output (generate the table & figure used in paper)
+6. Move script description in stdout.
